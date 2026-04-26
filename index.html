@@ -1211,7 +1211,7 @@ function renderAlertasInline() {
 
 // ===== FOTOS / AI =====
 async function callAI(b64,mt,prompt) {
-  var r = await fetch('/.netlify/functions/claude-proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:80,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:prompt}]}]})});
+  var r = await fetch('/.netlify/functions/claude-proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:80,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:prompt}]}]})});
   var d = await r.json(); return d.content&&d.content[0]?d.content[0].text.trim():'';
 }
 function loadImg(input,prevId,cb) {
