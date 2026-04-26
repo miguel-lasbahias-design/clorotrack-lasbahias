@@ -1211,7 +1211,7 @@ function renderAlertasInline() {
 
 // ===== FOTOS / AI =====
 async function callAI(b64,mt,prompt) {
-  var r = await fetch('/.netlify/functions/claude-proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:80,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:prompt}]}]})});
+  var r = await fetch('/.netlify/functions/claude-proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:80,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:prompt}]}]})});
   var d = await r.json(); return d.content&&d.content[0]?d.content[0].text.trim():'';
 }
 function loadImg(input,prevId,cb) {
@@ -1403,4 +1403,9 @@ function exportCSV(tipo){
   var h,rows;
   if(tipo==='recargas'){h='Fecha,Horometro_h,Caudalimetro_m3,Nivel_Ini_L,Nivel_Fin_L,Vol_Cargado_L,Hipo_real_val,Hipo_unidad,Hipo_recomendado_ml,Agua_L,Cl_activo_g,Conc_mezcla_gClL,Caudal_pozo_m3h,Dosis_mgClL,Receta_vigente,Responsable,Registrado_por\n';rows=data.map(r=>[r.fecha,r.horometro,r.caudal,r.nivelIni,r.nivelFin,r.volCargado,r.hipoVal||'',r.hipoUnidad||'',r.hipoRecomendado?.toFixed(1)||'',r.aguaL||'',r.grClActivo?.toFixed(3)||'',r.concMezcla?.toFixed(4)||'',r.caudalPozo?.toFixed(3)||'',r.dosis?.toFixed(3)||'',r.recetaVigente||'',r.responsable,r.creadoPor||''].join(',')).join('\n');}
   else{h='Fecha,Punto,Cloro_mgL,Turbiedad_UNT,pH,Temperatura_C,Responsable,Latitud,Longitud,Registrado_por\n';rows=data.map(c=>[c.fecha,c.punto,c.cloro,c.turb||'',c.ph||'',c.temp||'',c.responsable,c.lat||'',c.lng||'',c.creadoPor||''].join(',')).join('\n');}
-  var blob=new Blob([h+rows],{type:'text/csv'});v
+  var blob=new Blob([h+rows],{type:'text/csv'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='CloroTrack_'+tipo+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js").then(()=>console.log("SW registered")).catch(e=>console.log("SW error",e));}</script>
+</body>
+</html>
