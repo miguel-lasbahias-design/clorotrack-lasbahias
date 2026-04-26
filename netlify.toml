@@ -1,0 +1,10 @@
+# Configuración de Netlify para clorotrack-lasbahias
+# - publish: la raíz (sitio estático)
+# - functions: subcarpeta netlify/functions/
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"

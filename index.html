@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0A2E2A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>CloroTrack — Aguas Las Bahías</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+
+<!-- Firebase v9 compat (CDN) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+  --c-bg:        #0A2E2A;
+  --c-bg2:       #0F3D37;
+  --c-bg3:       #143D38;
+  --c-surface:   #1A4F48;
+  --c-border:    #2A6B62;
+  --c-border2:   #1F5750;
+  --c-accent:    #2DD4A8;
+  --c-accent2:   #1FB896;
+  --c-text:      #E8F5F2;
+  --c-text2:     #9ECEC7;
+  --c-text3:     #6BA39B;
+  --c-ok:        #22C55E;
+  --c-ok-bg:     rgba(34,197,94,.12);
+  --c-warn:      #F59E0B;
+  --c-warn-bg:   rgba(245,158,11,.12);
+  --c-danger:    #EF4444;
+  --c-danger-bg: rgba(239,68,68,.12);
+  --c-info:      #38BDF8;
+  --c-info-bg:   rgba(56,189,248,.10);
+  --r:           10px;
+  --r2:          6px;
+  --font:        'DM Sans', sans-serif;
+  --mono:        'DM Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font);
+  min-height: 100vh;
+  overscroll-behavior: none;
+}
+
+/* ===== LOGIN ===== */
+#login-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: radial-gradient(ellipse at 50% 0%, #1A5C52 0%, #0A2E2A 60%);
+}
+.login-logo {
+  width: 72px; height: 72px;
+  background: var(--c-accent);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 0 40px rgba(45,212,168,.3);
+}
+.login-title { font-size: 28px; font-weight: 600; letter-spacing: -.5px; margin-bottom: 4px; }
+.login-sub { font-size: 14px; color: var(--c-text2); margin-bottom: 2.5rem; }
+.btn-google {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 28px;
+  background: var(--c-text);
+  color: #1a1a1a;
+  border: none; border-radius: var(--r);
+  font-size: 15px; font-weight: 500; font-family: var(--font);
+  cursor: pointer;
+  box-shadow: 0 4px 24px rgba(0,0,0,.4);
+  transition: all .2s;
+}
+.btn-google:hover { transform: translateY(-1px); box-shadow: 0 6px 32px rgba(0,0,0,.5); }
+.login-version { font-size: 11px; color: var(--c-text3); margin-top: 2rem; font-family: var(--mono); }
+
+/* ===== APP SHELL ===== */
+#app { display: none; max-width: 540px; margin: 0 auto; padding: 0 0 80px; }
+
+/* ===== HEADER ===== */
+.hdr {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--c-bg);
+  border-bottom: 1px solid var(--c-border2);
+  padding: .75rem 1rem;
+  display: flex; align-items: center; gap: 10px;
+}
+.hdr-logo {
+  width: 32px; height: 32px;
+  background: var(--c-accent);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.hdr-title { font-size: 15px; font-weight: 600; }
+.hdr-sub { font-size: 11px; color: var(--c-text3); font-family: var(--mono); }
+.hdr-badges { margin-left: auto; display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-family: var(--mono); }
+.badge-blue { background: var(--c-info-bg); color: var(--c-info); border: .5px solid rgba(56,189,248,.2); }
+.badge-green { background: var(--c-ok-bg); color: var(--c-ok); border: .5px solid rgba(34,197,94,.2); }
+.hdr-user { 
+  width: 28px; height: 28px; border-radius: 50%; 
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  object-fit: cover; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--c-text2);
+}
+
+/* ===== BOTTOM NAV ===== */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: var(--c-bg2);
+  border-top: 1px solid var(--c-border2);
+  display: flex;
+  max-width: 540px; margin: 0 auto;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-btn {
+  flex: 1; padding: 10px 4px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  border: none; background: transparent;
+  color: var(--c-text3); cursor: pointer;
+  font-size: 9px; font-family: var(--font); font-weight: 500;
+  text-transform: uppercase; letter-spacing: .04em;
+  transition: color .15s; position: relative;
+}
+.nav-btn.active { color: var(--c-accent); }
+.nav-btn svg { width: 20px; height: 20px; }
+.nav-badge {
+  position: absolute; top: 6px; right: 50%;
+  transform: translateX(8px);
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--c-danger); color: #fff;
+  font-size: 9px; font-weight: 600;
+  display: none; align-items: center; justify-content: center;
+}
+.nav-badge.show { display: flex; }
+
+/* ===== SECTIONS ===== */
+.sec { display: none; padding: .75rem 1rem; }
+.sec.active { display: block; }
+
+/* ===== SYNC STATUS ===== */
+.sync-bar {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--c-text3);
+  padding: 6px 10px;
+  background: var(--c-bg3);
+  border-radius: var(--r2);
+  margin-bottom: 12px;
+  font-family: var(--mono);
+}
+.sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-ok); flex-shrink: 0; }
+.sync-dot.syncing { background: var(--c-warn); animation: pulse .8s infinite; }
+.sync-dot.offline { background: var(--c-danger); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* ===== FORMS ===== */
+.sec-title {
+  font-size: 10px; font-weight: 600;
+  color: var(--c-text3); text-transform: uppercase; letter-spacing: .08em;
+  margin-bottom: 8px; margin-top: 1rem;
+}
+.sec-title:first-child { margin-top: 0; }
+.fld { margin-bottom: 12px; }
+.lbl { font-size: 12px; color: var(--c-text2); margin-bottom: 4px; display: block; }
+.inp {
+  width: 100%; padding: 9px 11px;
+  background: var(--c-bg3);
+  border: 1px solid var(--c-border2);
+  border-radius: var(--r2);
+  color: var(--c-text); font-size: 14px; font-family: var(--font);
+  transition: border-color .15s;
+  -webkit-appearance: none;
+}
+.inp:focus { outline: none; border-color: var(--c-accent); }
+.inp[readonly] { color: var(--c-text3); cursor: default; }
+.inp-calc { color: var(--c-accent); font-weight: 500; font-family: var(--mono); }
+select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236BA39B' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; appearance: none; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+/* ===== CARDS ===== */
+.card {
+  background: var(--c-bg3);
+  border: 1px solid var(--c-border2);
+  border-radius: var(--r);
+  padding: .9rem 1rem;
+  margin-bottom: 8px;
+}
+.card-accent {
+  background: rgba(45,212,168,.06);
+  border: 1px solid rgba(45,212,168,.2);
+  border-radius: var(--r);
+  padding: 1rem;
+  margin-bottom: 12px;
+}
+.card-real {
+  background: var(--c-bg3);
+  border: 1.5px solid var(--c-accent);
+  border-radius: var(--r);
+  padding: .9rem 1rem;
+  margin-bottom: 12px;
+}
+
+/* ===== STATS ===== */
+.stat {
+  background: var(--c-bg3);
+  border: 1px solid var(--c-border2);
+  border-radius: var(--r2);
+  padding: 10px;
+  text-align: center;
+}
+.stat-val { font-size: 18px; font-weight: 600; color: var(--c-accent); font-family: var(--mono); }
+.stat-lbl { font-size: 10px; color: var(--c-text3); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* ===== BTNS ===== */
+.btn {
+  width: 100%; padding: 11px;
+  background: var(--c-accent);
+  color: var(--c-bg);
+  border: none; border-radius: var(--r2);
+  font-size: 14px; font-weight: 600; font-family: var(--font);
+  cursor: pointer; margin-top: 4px;
+  transition: all .15s;
+  letter-spacing: .01em;
+}
+.btn:hover { background: var(--c-accent2); }
+.btn:active { transform: scale(.98); }
+.btn-sec {
+  background: var(--c-bg3);
+  color: var(--c-text2);
+  border: 1px solid var(--c-border);
+  font-weight: 400;
+}
+.btn-sec:hover { border-color: var(--c-accent); color: var(--c-accent); }
+.btn-sm { padding: 5px 12px; font-size: 12px; width: auto; margin-top: 0; display: inline-block; }
+.btn-geo {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 12px; width: 100%;
+  background: var(--c-bg3); border: 1px solid var(--c-border);
+  border-radius: var(--r2); color: var(--c-text2);
+  font-size: 13px; font-family: var(--font); cursor: pointer;
+  transition: all .15s;
+}
+.btn-geo:hover { border-color: var(--c-accent); color: var(--c-accent); }
+.btn-geo.got { border-color: var(--c-ok); color: var(--c-ok); background: var(--c-ok-bg); }
+
+/* ===== TOGGLE ===== */
+.toggle-unit {
+  display: flex; gap: 2px;
+  background: var(--c-bg2); border-radius: var(--r2);
+  padding: 2px; width: fit-content; margin-bottom: 6px;
+}
+.toggle-unit button {
+  padding: 4px 12px; border: none; background: transparent;
+  border-radius: 4px; font-size: 11px; cursor: pointer;
+  color: var(--c-text3); font-family: var(--font);
+  transition: all .15s;
+}
+.toggle-unit button.active {
+  background: var(--c-surface);
+  color: var(--c-accent);
+  border: .5px solid var(--c-border);
+}
+
+/* ===== TAGS ===== */
+.tag { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 500; font-family: var(--mono); }
+.tag-green { background: var(--c-ok-bg); color: var(--c-ok); }
+.tag-warn  { background: var(--c-warn-bg); color: var(--c-warn); }
+.tag-red   { background: var(--c-danger-bg); color: var(--c-danger); }
+.tag-blue  { background: var(--c-info-bg); color: var(--c-info); }
+.tag-accent{ background: rgba(45,212,168,.1); color: var(--c-accent); }
+
+/* ===== ALERTS INLINE ===== */
+.alert-ok {
+  background: var(--c-ok-bg); border: 1px solid rgba(34,197,94,.2);
+  border-radius: var(--r2); padding: 8px 12px;
+  font-size: 12px; color: var(--c-ok);
+  margin-bottom: 10px; display: none;
+}
+.alert-ok.show { display: block; }
+
+/* ===== ALERTAS SISTEMA ===== */
+.alerta {
+  border-radius: var(--r); padding: .8rem 1rem;
+  margin-bottom: 8px; border: 1px solid;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.alerta-icon {
+  flex-shrink: 0; width: 22px; height: 22px;
+  border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 700;
+}
+.alerta-body { flex: 1; }
+.alerta-title { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+.alerta-sub { font-size: 11px; line-height: 1.5; opacity: .85; }
+.alerta-accion { font-size: 11px; margin-top: 6px; padding: 3px 10px; border-radius: 4px; border: 1px solid; cursor: pointer; font-family: var(--font); background: transparent; }
+.al-info  { background: rgba(56,189,248,.06); border-color: rgba(56,189,248,.2); }
+.al-info .alerta-icon { background: var(--c-info-bg); color: var(--c-info); }
+.al-info .alerta-title { color: var(--c-info); }
+.al-info .alerta-accion { border-color: rgba(56,189,248,.3); color: var(--c-info); }
+.al-warn  { background: var(--c-warn-bg); border-color: rgba(245,158,11,.25); }
+.al-warn .alerta-icon { background: rgba(245,158,11,.2); color: var(--c-warn); }
+.al-warn .alerta-title { color: var(--c-warn); }
+.al-warn .alerta-accion { border-color: rgba(245,158,11,.3); color: var(--c-warn); }
+.al-crit  { background: var(--c-danger-bg); border-color: rgba(239,68,68,.25); }
+.al-crit .alerta-icon { background: rgba(239,68,68,.2); color: var(--c-danger); }
+.al-crit .alerta-title { color: var(--c-danger); }
+.al-crit .alerta-accion { border-color: rgba(239,68,68,.3); color: var(--c-danger); }
+
+/* ===== DOSIS BOX ===== */
+.dosis-box { border-radius: var(--r); padding: 1rem; margin-bottom: 0; border: 1px solid; margin-top: 12px; }
+.dosis-ok   { background: var(--c-ok-bg);     border-color: rgba(34,197,94,.25); }
+.dosis-warn { background: var(--c-warn-bg);   border-color: rgba(245,158,11,.25); }
+.dosis-bad  { background: var(--c-danger-bg); border-color: rgba(239,68,68,.25); }
+.dosis-val  { font-size: 30px; font-weight: 600; color: var(--c-text); font-family: var(--mono); }
+
+/* ===== CALCULADORA ===== */
+.calculadora-box {
+  background: rgba(45,212,168,.05);
+  border: 1px solid rgba(45,212,168,.2);
+  border-radius: var(--r); padding: 1rem; margin-bottom: 12px;
+}
+.calc-num { font-size: 24px; font-weight: 600; color: var(--c-accent); font-family: var(--mono); }
+
+/* ===== DESVIACION ===== */
+.desv-box { border-radius: var(--r2); padding: 6px 10px; font-size: 12px; margin-top: 8px; display: none; font-family: var(--mono); }
+.desv-ok   { background: var(--c-ok-bg); color: var(--c-ok); }
+.desv-warn { background: var(--c-warn-bg); color: var(--c-warn); }
+
+/* ===== NIVEL BAR ===== */
+.nivel-bar { width: 100%; height: 6px; background: var(--c-bg2); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.nivel-fill { height: 100%; background: var(--c-accent); border-radius: 3px; transition: width .4s; }
+
+/* ===== UPLOAD AREAS ===== */
+.upload-area {
+  border: 1px dashed var(--c-border);
+  border-radius: var(--r2); padding: 10px;
+  text-align: center; cursor: pointer;
+  font-size: 11px; color: var(--c-text3);
+  background: var(--c-bg3); transition: all .15s; overflow: hidden;
+}
+.upload-area:hover { border-color: var(--c-accent); color: var(--c-accent); }
+.upload-area img { width: 100%; height: 70px; object-fit: cover; border-radius: 4px; display: none; }
+.up-label { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.foto-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+/* ===== AI BOX ===== */
+.ai-box {
+  background: var(--c-bg2); border: 1px solid var(--c-border2);
+  border-radius: var(--r2); padding: 7px 10px;
+  margin-top: 4px; font-size: 12px; color: var(--c-text3);
+  display: none; align-items: center; gap: 6px;
+}
+.ai-val { font-size: 14px; font-weight: 500; color: var(--c-accent); margin-left: auto; font-family: var(--mono); }
+
+/* ===== GEO ===== */
+.geo-box {
+  background: var(--c-bg3); border: 1px solid var(--c-border2);
+  border-radius: var(--r2); padding: 8px 10px;
+  font-size: 12px; color: var(--c-text3); margin-top: 6px; display: none;
+}
+.mini-map { width: 100%; height: 110px; border-radius: 6px; border: 1px solid var(--c-border2); margin-top: 6px; overflow: hidden; }
+.mini-map iframe { width: 100%; height: 100%; border: none; }
+
+/* ===== PARAM VIGENTE ===== */
+.param-v {
+  background: var(--c-ok-bg); border: 1px solid rgba(34,197,94,.2);
+  border-radius: var(--r2); padding: 8px 12px; margin-bottom: 6px;
+}
+
+/* ===== HISTORIAL ROWS ===== */
+.hist-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--c-border2); font-size: 12px; }
+.hist-row:last-child { border-bottom: none; }
+
+/* ===== TAB ===== */
+.tab2 { display: flex; gap: 3px; background: var(--c-bg2); border-radius: var(--r2); padding: 3px; margin-bottom: .9rem; }
+.tab2 button { flex: 1; padding: 6px; border: none; background: transparent; border-radius: 4px; font-size: 11px; color: var(--c-text3); cursor: pointer; font-family: var(--font); }
+.tab2 button.active { background: var(--c-surface); color: var(--c-accent); font-weight: 500; }
+
+/* ===== SEP ===== */
+.sep { height: 1px; background: var(--c-border2); margin: .9rem 0; }
+
+/* ===== SPINNER ===== */
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--c-border); border-top-color: var(--c-accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== EMPTY ===== */
+.empty { text-align: center; padding: 2.5rem 0; color: var(--c-text3); font-size: 13px; }
+
+/* ===== TABLE ===== */
+.tbl { width: 100%; font-size: 12px; border-collapse: collapse; table-layout: fixed; }
+.tbl th { text-align: left; padding: 5px 6px; color: var(--c-text3); font-weight: 500; border-bottom: 1px solid var(--c-border2); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.tbl td { padding: 7px 6px; border-bottom: 1px solid var(--c-border2); color: var(--c-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbl tr:last-child td { border-bottom: none; }
+
+/* ===== CLORO DOT ===== */
+.cloro-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; flex-shrink: 0; }
+
+/* ===== LOADING ===== */
+#loading-screen {
+  position: fixed; inset: 0; z-index: 999;
+  background: var(--c-bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+}
+.loading-ring {
+  width: 48px; height: 48px;
+  border: 3px solid var(--c-border);
+  border-top-color: var(--c-accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading-screen">
+  <div class="loading-ring"></div>
+  <div style="font-size:13px;color:var(--c-text3);font-family:var(--font)">Iniciando CloroTrack...</div>
+</div>
+
+<!-- LOGIN -->
+<div id="login-screen" style="display:none">
+  <div class="login-logo">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0A2E2A" stroke-width="2.5" stroke-linecap="round"><path d="M12 2C6 2 2 7 2 12s4 10 10 10 10-4.5 10-10S18 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
+  </div>
+  <div class="login-title">CloroTrack</div>
+  <div class="login-sub">Aguas Las Bahías — Sistema APR</div>
+  <button class="btn-google" onclick="loginGoogle()">
+    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.2 0 5.9 1.1 8.1 3.3l6-6C34.4 3.1 29.6 1 24 1 14.7 1 6.8 6.6 3.3 14.6l7 5.4C12 14 17.5 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.4 5.7C43.7 37 46.5 31.2 46.5 24.5z"/><path fill="#FBBC05" d="M10.3 28.8A14.5 14.5 0 0 1 9.5 24c0-1.7.3-3.3.8-4.8l-7-5.4A23 23 0 0 0 1 24c0 3.7.9 7.2 2.3 10.2l7-5.4z"/><path fill="#34A853" d="M24 47c5.6 0 10.4-1.9 13.8-5.1l-7.4-5.7c-1.8 1.2-4.1 2-6.4 2-6.5 0-12-4.5-13.9-10.5l-7 5.4C6.8 41.4 14.7 47 24 47z"/></svg>
+    Iniciar sesión con Google
+  </button>
+  <div id="login-error" style="font-size:12px;color:var(--c-danger);margin-top:1rem;display:none"></div>
+  <div class="login-version">v7.0 · Firebase · Las Bahías OS</div>
+</div>
+
+<!-- APP -->
+<div id="app">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hdr-logo">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A2E2A" stroke-width="2.5" stroke-linecap="round"><path d="M12 2C6 2 2 7 2 12s4 10 10 10 10-4.5 10-10S18 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
+    </div>
+    <div>
+      <div class="hdr-title">CloroTrack</div>
+      <div class="hdr-sub">Aguas Las Bahías</div>
+    </div>
+    <div class="hdr-badges">
+      <span class="badge badge-blue" id="hdr-r">0 recargas</span>
+      <span class="badge badge-green" id="hdr-c">0 mediciones</span>
+    </div>
+    <div class="hdr-user" id="hdr-user" onclick="showUserMenu()" title="Cerrar sesión">
+      <img id="user-photo" style="width:28px;height:28px;border-radius:50%;display:none">
+      <span id="user-initials"></span>
+    </div>
+  </div>
+
+  <!-- SECCIONES -->
+
+  <!-- RECARGA -->
+  <div id="sec-recarga" class="sec active">
+    <div id="alert-r" class="alert-ok"></div>
+    <div id="alertas-inline"></div>
+
+    <div class="sync-bar"><div class="sync-dot" id="sync-dot-r"></div><span id="sync-txt-r">Conectado · datos en tiempo real</span></div>
+
+    <div class="sec-title">Fotos de instrumentos</div>
+    <div class="foto-grid3">
+      <div class="fld">
+        <span class="lbl">Horómetro</span>
+        <label class="upload-area" for="img-hor"><img id="prev-hor"><div class="up-label" id="ulbl-hor"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Foto</span></div></label>
+        <input type="file" id="img-hor" accept="image/*" style="display:none" onchange="handleInst(this,'hor')">
+        <div id="ai-hor" class="ai-box"><span id="ai-hor-s"></span><span id="ai-hor-v" class="ai-val"></span></div>
+      </div>
+      <div class="fld">
+        <span class="lbl">Caudalímetro</span>
+        <label class="upload-area" for="img-cau"><img id="prev-cau"><div class="up-label" id="ulbl-cau"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Foto</span></div></label>
+        <input type="file" id="img-cau" accept="image/*" style="display:none" onchange="handleInst(this,'cau')">
+        <div id="ai-cau" class="ai-box"><span id="ai-cau-s"></span><span id="ai-cau-v" class="ai-val"></span></div>
+      </div>
+      <div class="fld">
+        <span class="lbl">Estanque</span>
+        <label class="upload-area" for="img-est"><img id="prev-est"><div class="up-label" id="ulbl-est"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Foto</span></div></label>
+        <input type="file" id="img-est" accept="image/*" style="display:none" onchange="handleSimple(this,'est')">
+      </div>
+    </div>
+
+    <div class="sec-title">Lecturas de instrumentos</div>
+    <div class="row2">
+      <div class="fld"><span class="lbl">Horómetro bomba (h)</span><input type="number" id="r-hor" class="inp" placeholder="2901.8" step="0.1" oninput="calcCaudalPozo()"></div>
+      <div class="fld"><span class="lbl">Caudalímetro (m³)</span><input type="number" id="r-cau" class="inp" placeholder="259668" oninput="calcCaudalPozo()"></div>
+    </div>
+    <div id="caudal-pozo-box" style="display:none;margin-bottom:12px">
+      <div style="background:var(--c-bg2);border:1px solid var(--c-border2);border-radius:var(--r2);padding:8px 12px;font-size:12px;color:var(--c-text3);display:flex;align-items:center;gap:8px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Caudal pozo calculado: <b id="caudal-pozo-val" style="color:var(--c-accent);font-family:var(--mono)"></b> m³/h
+        <span style="margin-left:auto;font-size:10px">Δcaudalímetro/Δhorómetro</span>
+      </div>
+    </div>
+
+    <div class="sec-title">Nivel estanque hipoclorito</div>
+    <div class="row2">
+      <div class="fld">
+        <span class="lbl">Foto antes</span>
+        <label class="upload-area" for="img-ea"><img id="prev-ea"><div class="up-label" id="ulbl-ea"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Antes</span></div></label>
+        <input type="file" id="img-ea" accept="image/*" style="display:none" onchange="handleEstanque(this,'ea','ini')">
+        <div id="ai-ea" class="ai-box"><span id="ai-ea-s"></span><span id="ai-ea-v" class="ai-val"></span></div>
+      </div>
+      <div class="fld">
+        <span class="lbl">Foto después</span>
+        <label class="upload-area" for="img-ed"><img id="prev-ed"><div class="up-label" id="ulbl-ed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Después</span></div></label>
+        <input type="file" id="img-ed" accept="image/*" style="display:none" onchange="handleEstanque(this,'ed','fin')">
+        <div id="ai-ed" class="ai-box"><span id="ai-ed-s"></span><span id="ai-ed-v" class="ai-val"></span></div>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="fld"><span class="lbl">Nivel inicial (L)</span><input type="number" id="r-ini" class="inp" placeholder="ej. 25" oninput="calcNivel()"></div>
+      <div class="fld"><span class="lbl">Nivel final (L)</span><input type="number" id="r-fin" class="inp" placeholder="ej. 150" oninput="calcNivel()"></div>
+    </div>
+    <div class="row2">
+      <div class="fld"><span class="lbl">Consumo período anterior (L)</span><input class="inp" id="r-vol-cons" readonly style="color:var(--c-text3)"></div>
+      <div class="fld"><span class="lbl">Volumen a cargar (L)</span><input class="inp inp-calc" id="r-vol" readonly></div>
+    </div>
+    <div class="nivel-bar" style="margin-bottom:4px"><div class="nivel-fill" id="nivel-fill" style="width:0%"></div></div>
+    <div style="font-size:10px;color:var(--c-text3);margin-bottom:12px;text-align:right;font-family:var(--mono)" id="nivel-pct"></div>
+
+    <div class="sep"></div>
+    <div class="sec-title">Calculadora de carga</div>
+    <div id="receta-vigente-box" style="margin-bottom:10px"></div>
+    <div id="calculadora-box" class="calculadora-box" style="display:none">
+      <div style="font-size:10px;font-weight:600;color:var(--c-accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📐 Para esta carga debes agregar:</div>
+      <div class="row2" style="margin-bottom:8px">
+        <div style="text-align:center;background:var(--c-bg3);border-radius:var(--r2);padding:10px;border:1px solid var(--c-border2)">
+          <div class="calc-num" id="calc-hipo-rec">—</div>
+          <div style="font-size:10px;color:var(--c-text3);margin-top:3px" id="calc-hipo-unit-lbl">ml hipoclorito</div>
+        </div>
+        <div style="text-align:center;background:var(--c-bg3);border-radius:var(--r2);padding:10px;border:1px solid var(--c-border2)">
+          <div class="calc-num" id="calc-agua-rec">—</div>
+          <div style="font-size:10px;color:var(--c-text3);margin-top:3px">L de agua</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--c-text3)" id="calc-detalle-rec"></div>
+    </div>
+
+    <div class="sec-title">Registro real de la carga</div>
+    <div class="card-real">
+      <div style="font-size:11px;color:var(--c-text3);margin-bottom:10px">Registra exactamente lo que se cargó — puede diferir de lo calculado.</div>
+      <div class="row2" style="align-items:end">
+        <div class="fld" style="margin-bottom:0">
+          <span class="lbl">Hipoclorito real</span>
+          <div class="toggle-unit" id="tgl-unidad">
+            <button class="active" onclick="setUnidad('ml')">ml</button>
+            <button onclick="setUnidad('gr')">gr</button>
+          </div>
+          <input type="number" id="r-hipoclorito" class="inp" placeholder="220" step="1" oninput="calcDosis()">
+        </div>
+        <div class="fld" style="margin-bottom:0">
+          <span class="lbl">Agua real (L)</span>
+          <input type="number" id="r-agua" class="inp" placeholder="10" step="0.5" oninput="calcDosis()">
+        </div>
+      </div>
+      <div id="desv-box" class="desv-box"></div>
+      <div id="resultado-mezcla" style="display:none;margin-top:12px">
+        <div style="font-size:10px;font-weight:600;color:var(--c-text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Mezcla real resultante</div>
+        <div class="row3">
+          <div class="stat"><div class="stat-val" id="calc-cl">—</div><div class="stat-lbl">g Cl activo</div></div>
+          <div class="stat"><div class="stat-val" id="calc-conc">—</div><div class="stat-lbl">g Cl/L mezcla</div></div>
+          <div class="stat"><div class="stat-val" id="calc-ratio">—</div><div class="stat-lbl">ml/10L equiv.</div></div>
+        </div>
+      </div>
+      <div id="dosis-box" class="dosis-box dosis-ok" style="display:none">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+          <span class="dosis-val" id="calc-dosis">—</span>
+          <span style="font-size:13px;color:var(--c-text3)">mg Cl/L agua</span>
+          <span class="tag" id="dosis-tag" style="margin-left:auto">—</span>
+        </div>
+        <div style="font-size:11px;color:var(--c-text3)" id="dosis-det"></div>
+        <div style="font-size:10px;color:var(--c-text3);margin-top:3px;font-family:var(--mono)">NCh409: 0.2–2.0 mg/L · Pozo: <span id="d-pozo">—</span> m³/h · Inyec: <span id="d-inj">—</span></div>
+      </div>
+      <div id="dosis-hint" style="font-size:11px;color:var(--c-text3);margin-top:8px;display:none"></div>
+    </div>
+
+    <div class="fld"><span class="lbl">Fecha y hora</span><input type="datetime-local" id="r-fecha" class="inp"></div>
+    <div class="fld"><span class="lbl">Responsable</span><input type="text" id="r-resp" class="inp" placeholder="Nombre del operador"></div>
+    <div class="fld"><span class="lbl">Observaciones</span><textarea id="r-obs" class="inp" rows="2" placeholder="Opcional..."></textarea></div>
+    <div class="sep"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span class="sec-title" style="margin:0">Medición de cloro (opcional)</span>
+      <button class="btn btn-sec btn-sm" onclick="toggleCloroR()" id="btn-cr-toggle">+ Agregar</button>
+    </div>
+    <div id="cloro-en-r" style="display:none">
+      <div class="row2">
+        <div class="fld"><span class="lbl">Punto muestreo</span>
+          <select id="rc-punto" class="inp"><option>Salida estanque</option><option>Red media</option><option>Extremo red</option><option>Otro</option></select>
+        </div>
+        <div class="fld"><span class="lbl">Cloro libre (mg/L)</span><input type="number" id="rc-cloro" class="inp" placeholder="0.5" step="0.01"></div>
+      </div>
+    </div>
+    <button class="btn" onclick="guardarRecarga()">Guardar recarga en Firebase</button>
+  </div>
+
+  <!-- CLORO LIBRE -->
+  <div id="sec-cloro" class="sec">
+    <div id="alert-c" class="alert-ok"></div>
+    <div class="sync-bar"><div class="sync-dot" id="sync-dot-c"></div><span id="sync-txt-c">Conectado · datos en tiempo real</span></div>
+    <div class="sec-title">Foto del instrumento / muestra</div>
+    <div class="fld">
+      <label class="upload-area" for="img-cloro" style="height:80px;display:flex;align-items:center;justify-content:center">
+        <img id="prev-cloro" style="width:100%;height:76px;object-fit:cover;border-radius:4px;display:none">
+        <div class="up-label" id="ulbl-cloro"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style="font-size:12px">Foto del colorímetro o muestra</span><span style="font-size:10px;opacity:.6">La IA leerá el valor automáticamente</span></div>
+      </label>
+      <input type="file" id="img-cloro" accept="image/*" style="display:none" onchange="handleFotoCloro(this)">
+      <div id="ai-cloro" class="ai-box"><span id="ai-cloro-s"></span><span id="ai-cloro-v" class="ai-val"></span></div>
+    </div>
+    <div class="sec-title">Ubicación GPS de la muestra</div>
+    <button class="btn-geo" id="btn-geo" onclick="obtenerGPS()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      Obtener ubicación GPS
+    </button>
+    <div id="geo-box" class="geo-box">
+      <div style="display:flex;align-items:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--c-ok)" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span style="color:var(--c-ok);font-size:12px">Ubicación capturada</span></div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--c-accent);margin-top:2px" id="geo-coords"></div>
+      <div class="mini-map" id="mini-map"></div>
+    </div>
+    <input type="hidden" id="c-lat"><input type="hidden" id="c-lng">
+    <div class="sec-title" style="margin-top:1rem">Datos de la medición</div>
+    <div class="fld"><span class="lbl">Fecha y hora</span><input type="datetime-local" id="c-fecha" class="inp"></div>
+    <div class="row2">
+      <div class="fld"><span class="lbl">Punto de muestreo</span>
+        <select id="c-punto" class="inp"><option>Salida estanque</option><option>Red media</option><option>Extremo red</option><option>Otro</option></select>
+      </div>
+      <div class="fld"><span class="lbl">Cloro libre (mg/L)</span><input type="number" id="c-cloro" class="inp" placeholder="0.5" step="0.01" oninput="updateCS()"></div>
+    </div>
+    <div id="c-status-box" style="border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:13px;display:none;align-items:center;gap:8px">
+      <span class="cloro-dot" id="c-dot"></span><span id="c-status-txt"></span>
+      <span style="font-size:10px;color:var(--c-text3);margin-left:auto">NCh409: 0.2–2.0 mg/L</span>
+    </div>
+    <div class="row3">
+      <div class="fld"><span class="lbl">Turbiedad (UNT)</span><input type="number" id="c-turb" class="inp" placeholder="1.2" step="0.1"></div>
+      <div class="fld"><span class="lbl">pH</span><input type="number" id="c-ph" class="inp" placeholder="7.2" step="0.1"></div>
+      <div class="fld"><span class="lbl">Temperatura (°C)</span><input type="number" id="c-temp" class="inp" placeholder="12" step="0.5"></div>
+    </div>
+    <div class="fld"><span class="lbl">Responsable</span><input type="text" id="c-resp" class="inp" placeholder="Nombre"></div>
+    <div class="fld"><span class="lbl">Observaciones</span><textarea id="c-obs" class="inp" rows="2" placeholder="Opcional..."></textarea></div>
+    <button class="btn" onclick="guardarCloro()">Guardar medición en Firebase</button>
+  </div>
+
+  <!-- ALERTAS -->
+  <div id="sec-alertas" class="sec">
+    <div class="sync-bar"><div class="sync-dot" id="sync-dot-a"></div><span>Evaluado en tiempo real</span></div>
+    <div class="sec-title">Estado operacional</div>
+    <div id="alertas-container"></div>
+    <div id="alertas-ok" style="display:none;text-align:center;padding:2.5rem 0">
+      <div style="font-size:40px;margin-bottom:10px">✓</div>
+      <div style="font-size:15px;font-weight:600;color:var(--c-accent)">Sistema operando normalmente</div>
+      <div style="font-size:12px;color:var(--c-text3);margin-top:4px">Sin alertas activas</div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec-title">Historial de alertas</div>
+    <div id="alertas-hist"></div>
+  </div>
+
+  <!-- PARÁMETROS -->
+  <div id="sec-params" class="sec">
+    <div id="alert-p" class="alert-ok"></div>
+    <div class="sync-bar"><div class="sync-dot" id="sync-dot-p"></div><span>Sincronizado con Firebase</span></div>
+    <div class="sec-title">Parámetros vigentes</div>
+    <div id="params-vigentes-display" style="margin-bottom:12px"></div>
+    <div class="sep"></div>
+    <div class="sec-title">Registrar nuevo valor</div>
+    <div class="fld"><span class="lbl">Parámetro</span>
+      <select id="p-tipo" class="inp" onchange="renderParamInput()">
+        <option value="receta">Receta de mezcla (concentración objetivo)</option>
+        <option value="inyeccion">Caudal inyección bomba dosificadora</option>
+        <option value="conc_comercial">Concentración hipoclorito comercial (%)</option>
+        <option value="densidad">Densidad hipoclorito (g/ml)</option>
+      </select>
+    </div>
+    <div id="p-input-area"></div>
+    <div class="fld"><span class="lbl">Fecha del cambio</span><input type="datetime-local" id="p-fecha" class="inp"></div>
+    <div class="fld"><span class="lbl">Motivo del cambio</span><input type="text" id="p-motivo" class="inp" placeholder="ej. ajuste por baja en cloro libre, nuevo lote Oxiquim..."></div>
+    <button class="btn" onclick="guardarParam()">Guardar parámetro en Firebase</button>
+    <div class="sep"></div>
+    <div class="sec-title">Historial de cambios</div>
+    <div id="param-hist-list"></div>
+  </div>
+
+  <!-- HISTORIAL -->
+  <div id="sec-historial" class="sec">
+    <div class="sync-bar"><div class="sync-dot"></div><span>Datos en tiempo real desde Firebase</span></div>
+    <div class="tab2">
+      <button class="active" id="htab-r" onclick="histTab('r')">Recargas</button>
+      <button id="htab-c" onclick="histTab('c')">Cloro libre</button>
+      <button id="htab-b" onclick="histTab('b')">Bitácora</button>
+    </div>
+    <div id="hist-r-list"></div>
+    <div id="hist-c-list" style="display:none"></div>
+    <div id="hist-b-list" style="display:none"></div>
+  </div>
+
+  <!-- INFORME -->
+  <div id="sec-informe" class="sec">
+    <div class="sync-bar"><div class="sync-dot"></div><span>Calculado en tiempo real</span></div>
+    <div class="sec-title">Resumen general</div>
+    <div class="row3" style="margin-bottom:.9rem">
+      <div class="stat"><div class="stat-val" id="s-r">0</div><div class="stat-lbl">Recargas</div></div>
+      <div class="stat"><div class="stat-val" id="s-v">0 L</div><div class="stat-lbl">Hipoclorito</div></div>
+      <div class="stat"><div class="stat-val" id="s-m">0</div><div class="stat-lbl">Medic. cloro</div></div>
+    </div>
+    <div class="row3" style="margin-bottom:.9rem">
+      <div class="stat"><div class="stat-val" id="s-avg">—</div><div class="stat-lbl">Cl prom mg/L</div></div>
+      <div class="stat"><div class="stat-val" id="s-dias">—</div><div class="stat-lbl">Días/recarga</div></div>
+      <div class="stat"><div class="stat-val" id="s-alrts">0</div><div class="stat-lbl">Alertas cloro</div></div>
+    </div>
+    <div class="sec-title">Última dosis calculada</div>
+    <div id="inf-dosis" style="margin-bottom:12px"></div>
+    <div class="sec-title">Estado cloro por punto</div>
+    <div id="inf-bitacora"></div>
+    <div class="sec-title" style="margin-top:.9rem">Últimas recargas</div>
+    <div id="inf-r-tbl"></div>
+    <div class="sep"></div>
+    <div class="row2">
+      <button class="btn btn-sec" onclick="exportCSV('recargas')">CSV Recargas</button>
+      <button class="btn btn-sec" onclick="exportCSV('cloro')">CSV Cloro</button>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <div class="bottom-nav">
+    <button class="nav-btn active" onclick="navTo('recarga')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+      Recarga
+    </button>
+    <button class="nav-btn" onclick="navTo('cloro')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2C8 2 5 6 5 10c0 5.5 7 12 7 12s7-6.5 7-12c0-4-3-8-7-8z"/></svg>
+      Cloro
+    </button>
+    <button class="nav-btn" onclick="navTo('alertas')" id="nav-alertas-btn">
+      <div class="nav-badge" id="nav-badge">!</div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Alertas
+    </button>
+    <button class="nav-btn" onclick="navTo('params')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M6.34 17.66l-1.41 1.41M2 12h2M20 12h2M19.07 19.07l-1.41-1.41M6.34 6.34 4.93 4.93M12 2v2M12 20v2"/></svg>
+      Parámetros
+    </button>
+    <button class="nav-btn" onclick="navTo('historial')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+      Historial
+    </button>
+    <button class="nav-btn" onclick="navTo('informe')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      Informe
+    </button>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+// ===== FIREBASE CONFIG =====
+const firebaseConfig = {
+  apiKey: "AIzaSyBAjPNr62Lpm3viIebSTqNMFJIWJFDdDL8",
+  authDomain: "maquicontrol-561d0.firebaseapp.com",
+  projectId: "maquicontrol-561d0",
+  storageBucket: "maquicontrol-561d0.firebasestorage.app",
+  messagingSenderId: "453325237448",
+  appId: "1:453325237448:web:d1e86eac4f7e095d8c89fd"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ===== ACCESO AUTORIZADO =====
+// ⚠️ Reemplaza javier@lasbahias.cl con el email real de Javier
+const EMAILS_AUTORIZADOS = [
+  'miguel@lasbahias.cl',
+  'javier@lasbahias.cl'
+];
+
+// ===== ESTADO LOCAL =====
+var state = {
+  recargas: [],
+  cloro: [],
+  params: [],
+  alertasHist: [],
+  user: null
+};
+var unidadHipo = 'ml';
+var UMBRAL_INFO=800, UMBRAL_WARN=1000, UMBRAL_DESV=0.4, UMBRAL_CONSEC=2;
+var DEFAULTS = {
+  receta:        { val:220, val2:10, unit:'ml/10L' },
+  inyeccion:     { val:null, unit:'ml/min' },
+  conc_comercial:{ val:10, unit:'%' },
+  densidad:      { val:1.12, unit:'g/ml' }
+};
+var unsubscribers = [];
+
+// ===== AUTH =====
+function loginGoogle() {
+  var provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    document.getElementById('login-error').style.display = 'block';
+    document.getElementById('login-error').textContent = 'Error: ' + err.message;
+  });
+}
+
+auth.onAuthStateChanged(user => {
+  document.getElementById('loading-screen').style.display = 'none';
+  if (!user) {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    return;
+  }
+  if (!EMAILS_AUTORIZADOS.includes(user.email)) {
+    auth.signOut();
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('login-error').style.display = 'block';
+    document.getElementById('login-error').textContent = 'Acceso no autorizado para ' + user.email;
+    return;
+  }
+  state.user = user;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  // Avatar
+  if (user.photoURL) {
+    document.getElementById('user-photo').src = user.photoURL;
+    document.getElementById('user-photo').style.display = 'block';
+  } else {
+    document.getElementById('user-initials').textContent = user.displayName ? user.displayName[0].toUpperCase() : '?';
+  }
+  initListeners();
+  setNow('r-fecha'); setNow('c-fecha'); setNow('p-fecha');
+  renderParamInput();
+  renderRecetaVigenteBox();
+  renderAlertasInline();
+});
+
+function showUserMenu() {
+  if (confirm('Sesión iniciada como ' + (state.user?.email || '') + '\n\n¿Cerrar sesión?')) {
+    unsubscribers.forEach(u => u());
+    auth.signOut();
+  }
+}
+
+// ===== FIRESTORE LISTENERS (tiempo real) =====
+function initListeners() {
+  var base = db.collection('clorotrack');
+
+  // Recargas
+  var u1 = base.doc('data').collection('recargas')
+    .orderBy('fecha', 'desc').limit(100)
+    .onSnapshot(snap => {
+      state.recargas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      updateBadges();
+      renderAlertasInline();
+      renderAlertas();
+    }, err => setSyncError('r', err));
+
+  // Cloro
+  var u2 = base.doc('data').collection('cloro')
+    .orderBy('fecha', 'desc').limit(200)
+    .onSnapshot(snap => {
+      state.cloro = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      updateBadges();
+      renderAlertasInline();
+      renderAlertas();
+    }, err => setSyncError('c', err));
+
+  // Params
+  var u3 = base.doc('data').collection('params')
+    .orderBy('fecha', 'desc')
+    .onSnapshot(snap => {
+      state.params = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderRecetaVigenteBox();
+      renderParamVigente();
+      renderParamHist();
+      renderAlertas();
+    }, err => setSyncError('p', err));
+
+  // AlertasHist
+  var u4 = base.doc('data').collection('alertasHist')
+    .orderBy('fecha', 'desc').limit(50)
+    .onSnapshot(snap => {
+      state.alertasHist = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    });
+
+  unsubscribers = [u1, u2, u3, u4];
+}
+
+function setSyncError(id, err) {
+  var dot = document.getElementById('sync-dot-' + id);
+  var txt = document.getElementById('sync-txt-' + id);
+  if (dot) { dot.className = 'sync-dot offline'; }
+  if (txt) txt.textContent = 'Sin conexión · ' + (err?.message || '');
+}
+
+// ===== HELPERS =====
+function getParam(tipo) {
+  var h = state.params.filter(p => p.tipo === tipo).sort((a,b) => {
+    if(!a.fecha) return 1; if(!b.fecha) return -1;
+    return b.fecha.localeCompare(a.fecha);
+  });
+  if (h.length) return h[0];
+  var d = DEFAULTS[tipo];
+  return { tipo, val: d.val, val2: d.val2||null, unit: d.unit, fecha: null, motivo: 'Valor por defecto' };
+}
+function setNow(id) {
+  var d=new Date(), p=n=>String(n).padStart(2,'0');
+  try { document.getElementById(id).value = d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); } catch(e){}
+}
+function fmtF(f) {
+  if (!f) return '—';
+  var d = new Date(f), p = n => String(n).padStart(2,'0');
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+String(d.getFullYear()).slice(2)+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function updateBadges() {
+  document.getElementById('hdr-r').textContent = state.recargas.length + ' recargas';
+  document.getElementById('hdr-c').textContent = state.cloro.length + ' mediciones';
+}
+
+// ===== NAV =====
+function navTo(s) {
+  document.querySelectorAll('.sec').forEach(x => x.classList.remove('active'));
+  document.getElementById('sec-'+s).classList.add('active');
+  var map = {recarga:0,cloro:1,alertas:2,params:3,historial:4,informe:5};
+  document.querySelectorAll('.nav-btn').forEach((b,i) => b.classList.toggle('active', i===map[s]));
+  if (s==='historial') histTab('r');
+  if (s==='informe') renderInforme();
+  if (s==='params') { renderParamVigente(); renderParamInput(); renderParamHist(); }
+  if (s==='recarga') { renderRecetaVigenteBox(); renderAlertasInline(); }
+  if (s==='alertas') renderAlertas();
+}
+function histTab(t) {
+  ['r','c','b'].forEach(x => { document.getElementById('hist-'+x+'-list').style.display = x===t?'block':'none'; document.getElementById('htab-'+x).classList.toggle('active',x===t); });
+  if (t==='r') renderHistR(); else if (t==='c') renderHistC(); else renderBitacora();
+}
+
+// ===== UNIDAD =====
+function setUnidad(u) {
+  unidadHipo = u;
+  document.querySelectorAll('#tgl-unidad button').forEach((b,i) => b.classList.toggle('active',(i===0&&u==='ml')||(i===1&&u==='gr')));
+  calcDosis();
+}
+
+// ===== CÁLCULOS =====
+function calcNivel() {
+  var ini = parseFloat(document.getElementById('r-ini').value)||0;
+  var fin = parseFloat(document.getElementById('r-fin').value)||0;
+  var aCargar = Math.max(0, 150-ini);
+  document.getElementById('r-vol').value = aCargar > 0 ? aCargar.toFixed(1) : '';
+  var pct = Math.min(100, Math.max(0, Math.round((fin/150)*100)));
+  document.getElementById('nivel-fill').style.width = pct+'%';
+  document.getElementById('nivel-pct').textContent = fin > 0 ? fin+' L / 150 L ('+pct+'%)' : '';
+  if (state.recargas.length) {
+    var pf = state.recargas[0].nivelFin;
+    if (pf && ini > 0) { var c=pf-ini; document.getElementById('r-vol-cons').value = c>0?c.toFixed(1):'0'; }
+  }
+  renderCalculadora(aCargar);
+}
+
+function renderCalculadora(volACargar) {
+  var box = document.getElementById('calculadora-box');
+  var pR = getParam('receta');
+  if (!pR.val || !pR.val2 || !volACargar) { box.style.display='none'; return; }
+  var hipoRec = (pR.val / pR.val2) * volACargar;
+  var pDens = getParam('densidad');
+  var hipoGr = hipoRec * (pDens.val||1.12);
+  document.getElementById('calc-hipo-rec').textContent = hipoRec.toFixed(0)+' ml';
+  document.getElementById('calc-hipo-unit-lbl').textContent = 'ml hipoclorito (≈ '+hipoGr.toFixed(0)+' g)';
+  document.getElementById('calc-agua-rec').textContent = volACargar.toFixed(0);
+  document.getElementById('calc-detalle-rec').textContent = 'Receta vigente: '+pR.val+' '+pR.unit+' · Agua a reponer: '+volACargar.toFixed(0)+' L';
+  box.style.display = 'block';
+}
+
+function calcCaudalPozo() {
+  var horAct = parseFloat(document.getElementById('r-hor').value);
+  var cauAct = parseFloat(document.getElementById('r-cau').value);
+  if (!horAct||!cauAct||!state.recargas.length) { document.getElementById('caudal-pozo-box').style.display='none'; calcDosis(); return; }
+  var prev = state.recargas[0];
+  var dHor=horAct-prev.horometro, dCau=cauAct-prev.caudal;
+  if (dHor>0&&dCau>0) {
+    var c=(dCau/dHor).toFixed(2);
+    document.getElementById('caudal-pozo-val').textContent = c;
+    document.getElementById('caudal-pozo-box').style.display = 'block';
+    calcDosis(parseFloat(c));
+  } else { document.getElementById('caudal-pozo-box').style.display='none'; calcDosis(); }
+}
+
+function calcDosis(caudalPozo) {
+  var hipoVal = parseFloat(document.getElementById('r-hipoclorito').value);
+  var aguaL = parseFloat(document.getElementById('r-agua').value);
+  var pR = getParam('receta'), pConc = getParam('conc_comercial'), pDens = getParam('densidad');
+
+  // Desviación
+  var dsvBox = document.getElementById('desv-box');
+  if (hipoVal && aguaL && pR.val && pR.val2) {
+    var hipoRec = (pR.val/pR.val2)*aguaL;
+    var desv = hipoVal - hipoRec;
+    var desvPct = Math.abs((desv/hipoRec)*100).toFixed(1);
+    if (Math.abs(desv)>2) {
+      dsvBox.className = 'desv-box ' + (Math.abs(desv)>15?'desv-warn':'desv-ok');
+      dsvBox.textContent = 'Δ vs receta: '+(desv>0?'+':'')+desv.toFixed(0)+' ml ('+desvPct+'%)';
+      dsvBox.style.display = 'block';
+    } else dsvBox.style.display='none';
+  } else dsvBox.style.display='none';
+
+  if (!hipoVal||!aguaL) {
+    document.getElementById('resultado-mezcla').style.display='none';
+    document.getElementById('dosis-box').style.display='none';
+    document.getElementById('dosis-hint').style.display='none';
+    return;
+  }
+  var concPct=pConc.val||10, densidad=pDens.val||1.12;
+  var grHipo = unidadHipo==='ml' ? hipoVal*densidad : hipoVal;
+  var grClActivo = grHipo*(concPct/100);
+  var concMezcla = grClActivo/aguaL;
+  var ratio = unidadHipo==='ml'?(hipoVal/aguaL)*10:((hipoVal/densidad)/aguaL)*10;
+  document.getElementById('calc-cl').textContent = grClActivo.toFixed(2)+' g';
+  document.getElementById('calc-conc').textContent = concMezcla.toFixed(3);
+  document.getElementById('calc-ratio').textContent = ratio.toFixed(1);
+  document.getElementById('resultado-mezcla').style.display='block';
+
+  var pInj = getParam('inyeccion');
+  if (pInj.val && caudalPozo) {
+    var injMl = pInj.unit==='gr/min' ? pInj.val/densidad : pInj.val;
+    var dosis = (concMezcla*(injMl/1000)/((caudalPozo*1000)/60))*1000;
+    var box=document.getElementById('dosis-box'), tag=document.getElementById('dosis-tag');
+    box.style.display='block'; document.getElementById('dosis-hint').style.display='none';
+    document.getElementById('calc-dosis').textContent = dosis.toFixed(2);
+    document.getElementById('d-pozo').textContent = caudalPozo.toFixed(2);
+    document.getElementById('d-inj').textContent = pInj.val+' '+pInj.unit;
+    if (dosis<0.2)     { box.className='dosis-box dosis-bad'; tag.className='tag tag-red'; tag.textContent='Bajo NCh409'; }
+    else if (dosis<=2) { box.className='dosis-box dosis-ok';  tag.className='tag tag-green'; tag.textContent='Óptimo NCh409 ✓'; }
+    else if (dosis<=3) { box.className='dosis-box dosis-warn';tag.className='tag tag-warn'; tag.textContent='Alto — monitorear'; }
+    else               { box.className='dosis-box dosis-bad'; tag.className='tag tag-red'; tag.textContent='Muy alto — revisar'; }
+    var injGr = pInj.unit==='gr/min'?pInj.val:(pInj.val*densidad);
+    document.getElementById('dosis-det').textContent = 'Inyección: '+injGr.toFixed(2)+' g/min · Conc.: '+concMezcla.toFixed(3)+' g Cl/L · Caudal: '+((caudalPozo*1000)/60).toFixed(1)+' L/min';
+  } else {
+    document.getElementById('dosis-box').style.display='none';
+    var msg = !pInj.val ? 'Configura el caudal de inyección en Parámetros.' : 'Ingresa horómetro y caudalímetro para calcular el caudal del pozo.';
+    document.getElementById('dosis-hint').textContent = msg;
+    document.getElementById('dosis-hint').style.display='block';
+  }
+}
+
+// ===== PARÁMETROS UI =====
+function renderParamInput() {
+  var tipo = document.getElementById('p-tipo').value, cur = getParam(tipo);
+  var html = '';
+  if (tipo==='receta') {
+    var u = cur.unit||'ml/10L', isGr = u.startsWith('gr');
+    html = '<div class="fld"><span class="lbl">Hipoclorito por cada 10 L de agua</span>'
+      +'<div class="toggle-unit" id="tgl-rec-unit" style="margin-bottom:6px">'
+      +'<button class="'+(isGr?'':'active')+'" onclick="setRecUnit(\'ml/10L\')">ml / 10 L</button>'
+      +'<button class="'+(isGr?'active':'')+'" onclick="setRecUnit(\'gr/10L\')">gr / 10 L</button>'
+      +'</div>'
+      +'<input type="number" id="p-val" class="inp" placeholder="220" step="1" value="'+(cur.val||220)+'">'
+      +'<input type="hidden" id="p-unit" value="'+u+'">'
+      +'<input type="hidden" id="p-val2" value="10">'
+      +'<div style="font-size:11px;color:var(--c-text3);margin-top:6px">Actual: <b style="color:var(--c-accent);font-family:var(--mono)">'+(cur.val||220)+' '+u+'</b></div>'
+      +'</div>';
+  } else if (tipo==='inyeccion') {
+    var iu = cur.unit||'ml/min';
+    html = '<div class="fld"><span class="lbl">Caudal de inyección</span>'
+      +'<div class="toggle-unit" id="tgl-inj-unit" style="margin-bottom:6px">'
+      +'<button class="'+(iu==='ml/min'?'active':'')+'" onclick="setInjUnit(\'ml/min\')">ml/min</button>'
+      +'<button class="'+(iu==='gr/min'?'active':'')+'" onclick="setInjUnit(\'gr/min\')">gr/min</button>'
+      +'</div>'
+      +'<input type="number" id="p-val" class="inp" placeholder="4.5" step="0.1" value="'+(cur.val||'')+'">'
+      +'<input type="hidden" id="p-unit" value="'+iu+'">'
+      +'<input type="hidden" id="p-val2" value="">'
+      +'</div>';
+  } else if (tipo==='conc_comercial') {
+    html = '<div class="fld"><span class="lbl">Concentración cloro activo (%)</span><input type="number" id="p-val" class="inp" placeholder="10" step="0.1" value="'+(cur.val||10)+'"><div style="font-size:11px;color:var(--c-text3);margin-top:4px">Oxiquim hipoclorito de sodio: 10% (valor por defecto)</div></div><input type="hidden" id="p-unit" value="%"><input type="hidden" id="p-val2" value="">';
+  } else {
+    html = '<div class="fld"><span class="lbl">Densidad (g/ml)</span><input type="number" id="p-val" class="inp" placeholder="1.12" step="0.01" value="'+(cur.val||1.12)+'"><div style="font-size:11px;color:var(--c-text3);margin-top:4px">Oxiquim 10%: ≈ 1.12 g/ml (valor por defecto)</div></div><input type="hidden" id="p-unit" value="g/ml"><input type="hidden" id="p-val2" value="">';
+  }
+  document.getElementById('p-input-area').innerHTML = html;
+}
+function setRecUnit(u) { document.getElementById('p-unit').value=u; document.querySelectorAll('#tgl-rec-unit button').forEach((b,i)=>b.classList.toggle('active',(i===0&&u==='ml/10L')||(i===1&&u==='gr/10L'))); }
+function setInjUnit(u) { document.getElementById('p-unit').value=u; document.querySelectorAll('#tgl-inj-unit button').forEach((b,i)=>b.classList.toggle('active',(i===0&&u==='ml/min')||(i===1&&u==='gr/min'))); }
+
+function renderRecetaVigenteBox() {
+  var pR=getParam('receta'), pInj=getParam('inyeccion');
+  var recTxt = pR.val&&pR.val2 ? pR.val+' '+pR.unit : 'No configurada';
+  document.getElementById('receta-vigente-box').innerHTML =
+    '<div style="background:var(--c-bg2);border:1px solid var(--c-border2);border-radius:var(--r2);padding:8px 12px;font-size:12px;color:var(--c-text3);display:flex;flex-wrap:wrap;gap:10px">'
+    +'<span>Receta: <b style="color:var(--c-accent);font-family:var(--mono)">'+recTxt+'</b></span>'
+    +(pInj.val?'<span>Inyección: <b style="color:var(--c-accent);font-family:var(--mono)">'+pInj.val+' '+pInj.unit+'</b></span>':'<span style="color:var(--c-warn)">⚠ Sin caudal inyección</span>')
+    +'</div>';
+}
+
+function renderParamVigente() {
+  var tipos=[{k:'receta',lbl:'Receta de mezcla'},{k:'inyeccion',lbl:'Caudal inyección'},{k:'conc_comercial',lbl:'Concentración Hipo.'},{k:'densidad',lbl:'Densidad Hipo.'}];
+  document.getElementById('params-vigentes-display').innerHTML = tipos.map(t=>{
+    var p=getParam(t.k);
+    var vt=t.k==='receta'?(p.val&&p.val2?p.val+' '+p.unit:'Sin configurar'):(p.val!=null?p.val+' '+(p.unit||''):'No configurado');
+    return '<div class="param-v"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:var(--c-ok);font-weight:500">'+t.lbl+'</span><span style="font-size:13px;font-weight:600;color:var(--c-accent);font-family:var(--mono)">'+vt+'</span></div>'+(p.fecha?'<div style="font-size:10px;color:var(--c-text3);margin-top:2px">Desde '+fmtF(p.fecha)+(p.motivo?' · '+p.motivo:'')+'</div>':'<div style="font-size:10px;color:var(--c-text3);margin-top:2px">Valor por defecto Oxiquim</div>')+'</div>';
+  }).join('');
+}
+
+function renderParamHist() {
+  var el=document.getElementById('param-hist-list');
+  if (!state.params.length) { el.innerHTML='<div class="empty">Sin cambios registrados</div>'; return; }
+  var lbls={receta:'Receta',inyeccion:'Caudal inyección',conc_comercial:'Concentración',densidad:'Densidad'};
+  el.innerHTML = '<div class="card">'+state.params.map(p=>'<div class="hist-row"><div><span style="font-weight:500;color:var(--c-text)">'+lbls[p.tipo]+'</span><br><span style="color:var(--c-text3);font-size:11px">'+fmtF(p.fecha)+(p.motivo?' · '+p.motivo:'')+'</span></div><span class="tag tag-accent" style="font-family:var(--mono)">'+p.val+' '+p.unit+'</span></div>').join('')+'</div>';
+}
+
+async function guardarParam() {
+  var tipo=document.getElementById('p-tipo').value;
+  var val=parseFloat(document.getElementById('p-val').value);
+  var val2El=document.getElementById('p-val2'); var val2=val2El?parseFloat(val2El.value)||null:null;
+  var unit=document.getElementById('p-unit').value;
+  var fecha=document.getElementById('p-fecha').value;
+  var motivo=document.getElementById('p-motivo').value;
+  if (!val||!fecha) { alert('Completa el valor y la fecha.'); return; }
+  try {
+    await db.collection('clorotrack').doc('data').collection('params').add({
+      tipo,val,val2,unit,fecha,motivo:motivo||'',
+      creadoPor:state.user?.email,
+      creadoEn:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    document.getElementById('p-motivo').value=''; setNow('p-fecha');
+    showAlert('alert-p','Parámetro guardado en Firebase ✓');
+  } catch(e) { alert('Error al guardar: '+e.message); }
+}
+
+// ===== ALERTAS =====
+function evaluarAlertas() {
+  var alertas = [];
+  var ultimaVerif = state.params.filter(p=>p.tipo==='inyeccion'||p.tipo==='receta').sort((a,b)=>b.fecha?.localeCompare(a.fecha||''))[0]||null;
+  var horVerif=0;
+  if (ultimaVerif && state.recargas.length) {
+    var rPost = state.recargas.filter(r=>r.fecha>=ultimaVerif.fecha);
+    if (rPost.length) horVerif = rPost[rPost.length-1].horometro||0;
+  }
+  var horActual = state.recargas.length ? state.recargas[0].horometro||0 : null;
+  if (horActual && horVerif) {
+    var horas = horActual - horVerif;
+    if (horas>=UMBRAL_WARN) alertas.push({nivel:'warn',tipo:'horometro',titulo:'Verificar parámetros operacionales',sub:'Han transcurrido '+horas.toFixed(0)+' h de operación (umbral: '+UMBRAL_WARN+' h). Confirma receta de mezcla y caudal de inyección.',accion:'Ir a Parámetros',fn:"navTo('params')"});
+    else if (horas>=UMBRAL_INFO) alertas.push({nivel:'info',tipo:'horometro',titulo:'Próximamente: revisar parámetros',sub:'Llevas '+horas.toFixed(0)+' h desde la última verificación. A las '+UMBRAL_WARN+' h se recomienda confirmar parámetros.',accion:'Ver parámetros',fn:"navTo('params')"});
+  } else if (!state.params.filter(p=>p.tipo==='receta').length && state.recargas.length) {
+    alertas.push({nivel:'info',tipo:'receta',titulo:'Receta de mezcla sin configurar',sub:'Ingresa la receta en Parámetros para habilitar la calculadora de carga.',accion:'Configurar',fn:"navTo('params')"});
+  }
+  var conDosis = state.recargas.filter(r=>r.dosis!=null);
+  if (conDosis.length && state.cloro.length>=3) {
+    var avg = state.cloro.slice(0,3).reduce((s,c)=>s+c.cloro,0)/3;
+    var desv = Math.abs(conDosis[0].dosis - avg);
+    if (desv>UMBRAL_DESV) alertas.push({nivel:'warn',tipo:'desviacion',titulo:'Desviación: dosis calculada vs cloro medido',sub:'Dosis calculada: '+conDosis[0].dosis.toFixed(2)+' mg/L · Promedio últimas 3 mediciones: '+avg.toFixed(2)+' mg/L · Δ: '+desv.toFixed(2)+' mg/L. Revisa receta o caudal de inyección.',accion:'Revisar parámetros',fn:"navTo('params')"});
+  }
+  ['Salida estanque','Red media','Extremo red','Otro'].forEach(punto=>{
+    var mp = state.cloro.filter(c=>c.punto===punto);
+    if (mp.length>=UMBRAL_CONSEC) {
+      if (mp.slice(0,UMBRAL_CONSEC).every(c=>c.cloro<0.2)) alertas.push({nivel:'crit',tipo:'bajo_'+punto,titulo:'Cloro bajo norma — '+punto,sub:UMBRAL_CONSEC+' mediciones consecutivas < 0.2 mg/L (último: '+mp[0].cloro+' mg/L). Riesgo sanitario. Aumenta la concentración de mezcla.',accion:'Acción requerida',fn:"navTo('params')"});
+      if (mp.slice(0,UMBRAL_CONSEC).every(c=>c.cloro>2.0)) alertas.push({nivel:'warn',tipo:'alto_'+punto,titulo:'Cloro elevado — '+punto,sub:UMBRAL_CONSEC+' mediciones > 2.0 mg/L (último: '+mp[0].cloro+' mg/L). Revisa dosificación.',accion:'Revisar',fn:"navTo('params')"});
+    }
+  });
+  return alertas;
+}
+
+function renderAlertas() {
+  var alertas = evaluarAlertas();
+  var total = alertas.filter(a=>a.nivel!=='info').length;
+  var badge = document.getElementById('nav-badge');
+  if (total>0) { badge.textContent=total; badge.classList.add('show'); }
+  else badge.classList.remove('show');
+
+  var cont=document.getElementById('alertas-container'), ok=document.getElementById('alertas-ok');
+  if (!alertas.length) { cont.innerHTML=''; ok.style.display='block'; }
+  else {
+    ok.style.display='none';
+    cont.innerHTML = alertas.map(a=>'<div class="alerta al-'+a.nivel+'"><div class="alerta-icon">'+(a.nivel==='crit'?'!!':a.nivel==='warn'?'!':'i')+'</div><div class="alerta-body"><div class="alerta-title">'+a.titulo+'</div><div class="alerta-sub">'+a.sub+'</div><button class="alerta-accion" onclick="'+a.fn+'">'+a.accion+' →</button></div></div>').join('');
+    // Guardar en Firestore (dedup 48h)
+    alertas.filter(a=>a.nivel!=='info').forEach(async a=>{
+      var ya = state.alertasHist.find(h=>h.tipo===a.tipo && (Date.now()-new Date(h.fecha).getTime())<172800000);
+      if (!ya) {
+        try { await db.collection('clorotrack').doc('data').collection('alertasHist').add({fecha:new Date().toISOString(),nivel:a.nivel,tipo:a.tipo,titulo:a.titulo}); } catch(e){}
+      }
+    });
+  }
+  var hist=document.getElementById('alertas-hist');
+  hist.innerHTML = state.alertasHist.length
+    ? '<div class="card">'+state.alertasHist.slice(0,15).map(h=>'<div class="hist-row"><div><span style="font-weight:500;color:var(--c-text);font-size:12px">'+h.titulo+'</span><br><span style="font-size:11px;color:var(--c-text3)">'+fmtF(h.fecha)+'</span></div><span class="tag tag-'+({crit:'red',warn:'warn',info:'blue'}[h.nivel]||'blue')+'">'+h.nivel+'</span></div>').join('')+'</div>'
+    : '<div class="empty">Sin historial</div>';
+}
+
+function renderAlertasInline() {
+  var alertas = evaluarAlertas().filter(a=>a.nivel==='crit'||a.nivel==='warn');
+  document.getElementById('alertas-inline').innerHTML = alertas.length
+    ? alertas.map(a=>'<div class="alerta al-'+a.nivel+'" style="margin-bottom:8px"><div class="alerta-icon">'+(a.nivel==='crit'?'!!':'!')+'</div><div class="alerta-body"><div class="alerta-title">'+a.titulo+'</div><div class="alerta-sub" style="font-size:10px">'+a.sub.substring(0,120)+'</div><button class="alerta-accion" onclick="navTo(\'alertas\')">Ver alertas →</button></div></div>').join('')
+    : '';
+}
+
+// ===== FOTOS / AI =====
+async function callAI(b64,mt,prompt) {
+  var r = await fetch('/.netlify/functions/claude-proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:80,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:prompt}]}]})});
+  var d = await r.json(); return d.content&&d.content[0]?d.content[0].text.trim():'';
+}
+function loadImg(input,prevId,cb) {
+  var file=input.files[0]; if(!file)return;
+  var r=new FileReader();
+  r.onload=function(e){var img=document.getElementById('prev-'+prevId);if(img){img.src=e.target.result;img.style.display='block';}var ul=document.getElementById('ulbl-'+prevId);if(ul)ul.style.display='none';if(cb)cb(e.target.result);};
+  r.readAsDataURL(file);
+}
+function handleInst(input,tipo) {
+  loadImg(input,tipo,async function(dataUrl){
+    var box=document.getElementById('ai-'+tipo),s=document.getElementById('ai-'+tipo+'-s'),v=document.getElementById('ai-'+tipo+'-v');
+    box.style.display='flex';s.innerHTML='<span class="spinner"></span>';v.textContent='';
+    var b64=dataUrl.split(',')[1],mt=dataUrl.split(';')[0].split(':')[1];
+    var p={hor:'Horómetro electrónico. Lee las horas acumuladas. Solo el número. Ej: 2901.8',cau:'Caudalímetro. Lee m³ acumulados. Solo el número. Ej: 259668'};
+    try{var val=await callAI(b64,mt,p[tipo]);if(val){s.textContent=tipo==='hor'?'Horómetro:':'Caudalímetro:';v.textContent=val+(tipo==='hor'?' h':' m³');document.getElementById('r-'+tipo).value=val;calcCaudalPozo();}else s.textContent='No detectado.';}catch(e){s.textContent='Error.';}
+  });
+}
+function handleEstanque(input,prevId,momento) {
+  loadImg(input,prevId,async function(dataUrl){
+    var box=document.getElementById('ai-'+prevId),s=document.getElementById('ai-'+prevId+'-s'),v=document.getElementById('ai-'+prevId+'-v');
+    box.style.display='flex';s.innerHTML='<span class="spinner"></span>';v.textContent='';
+    var b64=dataUrl.split(',')[1],mt=dataUrl.split(';')[0].split(':')[1];
+    try{var val=await callAI(b64,mt,'Estanque hipoclorito con escala en litros. Lee el nivel actual. Solo el número. Ej: 75');
+    if(val){s.textContent=momento==='ini'?'Nivel inicial:':'Nivel final:';v.textContent=val+' L';if(momento==='ini'&&!document.getElementById('r-ini').value)document.getElementById('r-ini').value=val;if(momento==='fin'&&!document.getElementById('r-fin').value)document.getElementById('r-fin').value=val;calcNivel();}else s.textContent='No detectado.';}catch(e){s.textContent='Error.';}
+  });
+}
+function handleSimple(input,prevId){loadImg(input,prevId,null);}
+function handleFotoCloro(input) {
+  loadImg(input,'cloro',async function(dataUrl){
+    var box=document.getElementById('ai-cloro'),s=document.getElementById('ai-cloro-s'),v=document.getElementById('ai-cloro-v');
+    box.style.display='flex';s.innerHTML='<span class="spinner"></span>';v.textContent='';
+    var b64=dataUrl.split(',')[1],mt=dataUrl.split(';')[0].split(':')[1];
+    try{var val=await callAI(b64,mt,'Colorímetro o comparador de cloro libre. Lee el valor en mg/L o ppm. Solo el número. Ej: 0.8');
+    if(val){s.textContent='Cloro leído:';v.textContent=val+' mg/L';document.getElementById('c-cloro').value=val;updateCS();}else s.textContent='No detectado.';}catch(e){s.textContent='Error.';}
+  });
+}
+
+// ===== GPS =====
+function obtenerGPS(){
+  var btn=document.getElementById('btn-geo');btn.innerHTML='<span class="spinner"></span> Obteniendo...';btn.disabled=true;
+  if(!navigator.geolocation){alert('GPS no disponible.');btn.disabled=false;return;}
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lat=pos.coords.latitude.toFixed(6),lng=pos.coords.longitude.toFixed(6),acc=Math.round(pos.coords.accuracy);
+    document.getElementById('c-lat').value=lat;document.getElementById('c-lng').value=lng;
+    document.getElementById('geo-coords').textContent=lat+', '+lng+' (±'+acc+' m)';
+    document.getElementById('geo-box').style.display='block';
+    document.getElementById('mini-map').innerHTML='<iframe src="https://maps.google.com/maps?q='+lat+','+lng+'&z=16&output=embed" loading="lazy"></iframe>';
+    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg> Ubicación capturada';
+    btn.classList.add('got');btn.disabled=false;
+  },function(err){var m={1:'Permiso denegado.',2:'Sin posición.',3:'Tiempo agotado.'};alert(m[err.code]||'Error GPS.');btn.disabled=false;btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg> Reintentar GPS';},{enableHighAccuracy:true,timeout:12000});
+}
+
+// ===== CLORO STATUS =====
+function cloroEst(val){if(val===''||val===null||val===undefined||isNaN(parseFloat(val)))return null;val=parseFloat(val);if(val<0.2)return{txt:'Bajo — riesgo sanitario',bg:var_c('danger-bg'),dot:'#EF4444',tag:'red'};if(val<=2)return{txt:'Óptimo ✓',bg:var_c('ok-bg'),dot:'#22C55E',tag:'green'};if(val<=3)return{txt:'Alto — monitorear',bg:var_c('warn-bg'),dot:'#F59E0B',tag:'warn'};return{txt:'Muy alto — revisar',bg:var_c('danger-bg'),dot:'#EF4444',tag:'red'};}
+function var_c(n){return'var(--c-'+n+')';}
+function updateCS(){var val=document.getElementById('c-cloro').value,est=cloroEst(val);var box=document.getElementById('c-status-box');if(est){box.style.display='flex';box.style.background=est.bg;document.getElementById('c-dot').style.background=est.dot;document.getElementById('c-status-txt').textContent=est.txt;}else box.style.display='none';}
+function toggleCloroR(){var d=document.getElementById('cloro-en-r'),open=d.style.display!=='none';d.style.display=open?'none':'block';document.getElementById('btn-cr-toggle').textContent=open?'+ Agregar':'− Quitar';}
+
+// ===== GUARDAR =====
+function showAlert(id, msg) {
+  var el=document.getElementById(id);el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3500);
+}
+
+async function guardarRecarga(){
+  var fecha=document.getElementById('r-fecha').value,hor=document.getElementById('r-hor').value,cau=document.getElementById('r-cau').value,ini=document.getElementById('r-ini').value,fin=document.getElementById('r-fin').value;
+  if(!fecha||!hor||!cau||!ini||!fin){alert('Completa: fecha, horómetro, caudalímetro y niveles.');return;}
+  var volCargado=parseFloat(document.getElementById('r-vol').value)||0;
+  var hipoVal=parseFloat(document.getElementById('r-hipoclorito').value)||null;
+  var aguaL=parseFloat(document.getElementById('r-agua').value)||null;
+  var pConc=getParam('conc_comercial'),pDens=getParam('densidad'),pInj=getParam('inyeccion'),pRec=getParam('receta');
+  var grClActivo=null,concMezcla=null,dosis=null,caudalPozo=null,hipoRec=null;
+  if(hipoVal&&aguaL){
+    var grHipo=unidadHipo==='ml'?hipoVal*(pDens.val||1.12):hipoVal;
+    grClActivo=grHipo*((pConc.val||10)/100);concMezcla=grClActivo/aguaL;
+    if(pRec.val&&pRec.val2)hipoRec=(pRec.val/pRec.val2)*aguaL;
+    var cpTxt=document.getElementById('caudal-pozo-val').textContent;var cpVal=parseFloat(cpTxt);
+    if(cpVal&&pInj.val){caudalPozo=cpVal;var injMl=pInj.unit==='gr/min'?pInj.val/(pDens.val||1.12):pInj.val;dosis=(concMezcla*(injMl/1000)/((cpVal*1000)/60))*1000;}
+  }
+  var rcv=document.getElementById('rc-cloro').value;
+  var col=db.collection('clorotrack').doc('data');
+  try {
+    if(document.getElementById('cloro-en-r').style.display!=='none'&&rcv){
+      await col.collection('cloro').add({fecha,punto:document.getElementById('rc-punto').value,cloro:parseFloat(rcv),turb:'',ph:'',temp:'',responsable:document.getElementById('r-resp').value||'—',obs:'Junto a recarga',lat:'',lng:'',enRecarga:true,creadoPor:state.user?.email,creadoEn:firebase.firestore.FieldValue.serverTimestamp()});
+    }
+    await col.collection('recargas').add({fecha,horometro:parseFloat(hor),caudal:parseFloat(cau),nivelIni:parseFloat(ini),nivelFin:parseFloat(fin),volCargado,hipoVal,hipoUnidad:unidadHipo,aguaL,grClActivo,concMezcla,caudalPozo,dosis,hipoRecomendado:hipoRec,recetaVigente:pRec.val?pRec.val+' '+pRec.unit:null,responsable:document.getElementById('r-resp').value||'—',obs:document.getElementById('r-obs').value||'',creadoPor:state.user?.email,creadoEn:firebase.firestore.FieldValue.serverTimestamp()});
+    resetRecarga();
+    showAlert('alert-r','Recarga guardada en Firebase ✓');
+  } catch(e){alert('Error al guardar: '+e.message);}
+}
+
+function resetRecarga(){
+  ['r-ini','r-fin','r-vol','r-vol-cons','r-resp','r-obs','r-hipoclorito','r-agua','rc-cloro'].forEach(id=>{try{document.getElementById(id).value='';}catch(e){}});
+  document.getElementById('nivel-fill').style.width='0%';document.getElementById('nivel-pct').textContent='';
+  document.getElementById('cloro-en-r').style.display='none';document.getElementById('btn-cr-toggle').textContent='+ Agregar';
+  document.getElementById('resultado-mezcla').style.display='none';document.getElementById('dosis-box').style.display='none';document.getElementById('dosis-hint').style.display='none';document.getElementById('desv-box').style.display='none';document.getElementById('caudal-pozo-box').style.display='none';document.getElementById('calculadora-box').style.display='none';
+  ['prev-hor','prev-cau','prev-est','prev-ea','prev-ed'].forEach(id=>{var e=document.getElementById(id);if(e)e.style.display='none';});
+  ['ulbl-hor','ulbl-cau','ulbl-est','ulbl-ea','ulbl-ed'].forEach(id=>{var e=document.getElementById(id);if(e)e.style.display='flex';});
+  ['ai-hor','ai-cau','ai-ea','ai-ed'].forEach(id=>{var e=document.getElementById(id);if(e)e.style.display='none';});
+  setNow('r-fecha');
+}
+
+async function guardarCloro(){
+  var fecha=document.getElementById('c-fecha').value,cloro=document.getElementById('c-cloro').value;
+  if(!fecha||!cloro){alert('Completa fecha y valor de cloro libre.');return;}
+  try{
+    await db.collection('clorotrack').doc('data').collection('cloro').add({fecha,punto:document.getElementById('c-punto').value,cloro:parseFloat(cloro),turb:document.getElementById('c-turb').value||'',ph:document.getElementById('c-ph').value||'',temp:document.getElementById('c-temp').value||'',responsable:document.getElementById('c-resp').value||'—',obs:document.getElementById('c-obs').value||'',lat:document.getElementById('c-lat').value||'',lng:document.getElementById('c-lng').value||'',enRecarga:false,creadoPor:state.user?.email,creadoEn:firebase.firestore.FieldValue.serverTimestamp()});
+    ['c-cloro','c-turb','c-ph','c-temp','c-resp','c-obs','c-lat','c-lng'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('c-status-box').style.display='none';document.getElementById('prev-cloro').style.display='none';document.getElementById('ulbl-cloro').style.display='flex';document.getElementById('ai-cloro').style.display='none';document.getElementById('geo-box').style.display='none';
+    var btn=document.getElementById('btn-geo');btn.classList.remove('got');btn.disabled=false;btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg> Obtener ubicación GPS';
+    setNow('c-fecha');
+    showAlert('alert-c','Medición guardada en Firebase ✓');
+  }catch(e){alert('Error al guardar: '+e.message);}
+}
+
+// ===== HISTORIAL =====
+function renderHistR(){
+  var el=document.getElementById('hist-r-list');
+  if(!state.recargas.length){el.innerHTML='<div class="empty">Sin recargas aún</div>';return;}
+  el.innerHTML=state.recargas.map(r=>{
+    var dt=r.dosis!=null?'<span class="tag tag-'+(r.dosis<0.2||r.dosis>2?'red':r.dosis<=2?'green':'warn')+'" style="margin-left:4px;font-family:var(--mono)">'+r.dosis.toFixed(2)+' mg/L</span>':'';
+    var dv='';if(r.hipoVal&&r.hipoRecomendado){var d=r.hipoVal-r.hipoRecomendado;if(Math.abs(d)>2)dv='<span style="font-size:10px;color:var(--c-text3)"> Δ'+(d>0?'+':'')+d.toFixed(0)+'</span>';}
+    return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:500;color:var(--c-text)">'+fmtF(r.fecha)+'</span><div><span class="tag tag-blue">+'+r.volCargado+' L</span>'+dt+'</div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 14px;font-size:12px;color:var(--c-text3)">'
+    +'<span>Horóm.: <b style="color:var(--c-accent);font-family:var(--mono)">'+r.horometro+' h</b></span><span>Caudal: <b style="color:var(--c-accent);font-family:var(--mono)">'+r.caudal?.toLocaleString('es-CL')+' m³</b></span>'
+    +'<span>Ini: <b style="color:var(--c-text)">'+r.nivelIni+' L</b></span><span>Fin: <b style="color:var(--c-text)">'+r.nivelFin+' L</b></span>'
+    +(r.hipoVal?'<span>Hipo real: <b style="color:var(--c-text)">'+r.hipoVal+' '+r.hipoUnidad+'</b>'+dv+'</span><span>Agua: <b style="color:var(--c-text)">'+r.aguaL+' L</b></span>':'')
+    +(r.recetaVigente?'<span style="grid-column:span 2">Receta: <b style="color:var(--c-text);font-family:var(--mono)">'+r.recetaVigente+'</b></span>':'')
+    +(r.concMezcla?'<span>Conc.: <b style="color:var(--c-accent);font-family:var(--mono)">'+r.concMezcla.toFixed(3)+' g Cl/L</b></span>':'')
+    +(r.caudalPozo?'<span>Pozo: <b style="color:var(--c-accent);font-family:var(--mono)">'+r.caudalPozo.toFixed(2)+' m³/h</b></span>':'')
+    +(r.responsable&&r.responsable!=='—'?'<span style="grid-column:span 2">Resp.: <b style="color:var(--c-text)">'+r.responsable+'</b></span>':'')
+    +(r.creadoPor?'<span style="grid-column:span 2;font-size:10px;color:var(--c-text3)">Registrado por: '+r.creadoPor+'</span>':'')
+    +'</div></div>';
+  }).join('');
+}
+
+function renderHistC(){
+  var el=document.getElementById('hist-c-list');
+  if(!state.cloro.length){el.innerHTML='<div class="empty">Sin mediciones aún</div>';return;}
+  el.innerHTML=state.cloro.map(c=>{
+    var est=cloroEst(c.cloro),tagCls=est?'tag-'+est.tag:'tag-blue';
+    var geo=c.lat?'<div style="margin-top:4px;font-size:11px"><a href="https://maps.google.com/?q='+c.lat+','+c.lng+'" target="_blank" style="color:var(--c-info)">📍 Ver en mapa ('+parseFloat(c.lat).toFixed(4)+', '+parseFloat(c.lng).toFixed(4)+')</a></div>':'';
+    return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:13px;font-weight:500;color:var(--c-text)">'+fmtF(c.fecha)+'</span><span class="tag '+tagCls+'" style="font-family:var(--mono)">'+c.cloro+' mg/L</span></div>'
+    +'<div style="font-size:12px;color:var(--c-text3);display:grid;grid-template-columns:1fr 1fr;gap:3px 14px">'
+    +'<span>Punto: <b style="color:var(--c-text)">'+c.punto+'</b></span>'+(c.turb?'<span>Turb.: <b>'+c.turb+' UNT</b></span>':'<span></span>')
+    +(c.ph?'<span>pH: <b>'+c.ph+'</b></span>':'')+(c.temp?'<span>T°: <b>'+c.temp+' °C</b></span>':'')
+    +(c.enRecarga?'<span style="grid-column:span 2"><span class="tag tag-blue">junto a recarga</span></span>':'')
+    +(c.creadoPor?'<span style="grid-column:span 2;font-size:10px">Registrado por: '+c.creadoPor+'</span>':'')
+    +'</div>'+geo+'</div>';
+  }).join('');
+}
+
+function renderBitacora(){
+  var el=document.getElementById('hist-b-list');
+  if(!state.cloro.length){el.innerHTML='<div class="empty">Sin mediciones</div>';return;}
+  var puntos=['Salida estanque','Red media','Extremo red','Otro'],html='';
+  puntos.forEach(function(punto){
+    var meds=state.cloro.filter(c=>c.punto===punto);if(!meds.length)return;
+    var u=meds[0],est=cloroEst(u.cloro);
+    html+='<div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:13px;font-weight:500;color:var(--c-text)">'+punto+'</span><span class="tag tag-'+(est?est.tag:'blue')+'" style="font-family:var(--mono)">'+u.cloro+' mg/L</span>';
+    if(meds.length>=2){var d=meds[0].cloro-meds[1].cloro;html+='<span style="font-size:11px;color:var(--c-text3);margin-left:auto">'+(d>0?'↑ +':d<0?'↓ ':'→ ')+Math.abs(d).toFixed(2)+'</span>';}
+    html+='</div>';
+    meds.slice(0,6).forEach(function(m){var me=cloroEst(m.cloro),dot=me?me.dot:'#6BA39B';var geo=m.lat?'<a href="https://maps.google.com/?q='+m.lat+','+m.lng+'" target="_blank" style="color:var(--c-info);margin-left:4px;font-size:10px">📍</a>':'';html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--c-border2);font-size:12px"><span style="display:flex;align-items:center"><span class="cloro-dot" style="background:'+dot+'"></span>'+fmtF(m.fecha)+'</span><span style="font-weight:500;color:var(--c-text);font-family:var(--mono)">'+m.cloro+' mg/L'+geo+'</span></div>';});
+    html+='</div>';
+  });
+  el.innerHTML=html||'<div class="empty">Sin datos</div>';
+}
+
+function renderInforme(){
+  document.getElementById('s-r').textContent=state.recargas.length;
+  document.getElementById('s-v').textContent=state.recargas.reduce((s,r)=>s+(r.volCargado||0),0)+' L';
+  document.getElementById('s-m').textContent=state.cloro.length;
+  document.getElementById('s-alrts').textContent=state.cloro.filter(c=>c.cloro<0.2||c.cloro>2.0).length;
+  if(state.cloro.length)document.getElementById('s-avg').textContent=(state.cloro.reduce((s,c)=>s+c.cloro,0)/state.cloro.length).toFixed(2);
+  if(state.recargas.length>=2){var ds=state.recargas.map(r=>r.fecha).sort();document.getElementById('s-dias').textContent=Math.round((new Date(ds[ds.length-1])-new Date(ds[0]))/(864e5*(state.recargas.length-1)));}
+  var cd=state.recargas.filter(r=>r.dosis!=null);
+  var eld=document.getElementById('inf-dosis');
+  if(cd.length){var u=cd[0],cls=u.dosis<0.2||u.dosis>2?'dosis-bad':u.dosis<=2?'dosis-ok':'dosis-warn';eld.innerHTML='<div class="dosis-box '+cls+'"><div style="display:flex;align-items:baseline;gap:8px"><span class="dosis-val">'+u.dosis.toFixed(2)+'</span><span style="font-size:13px;color:var(--c-text3)">mg Cl/L agua potable</span></div><div style="font-size:11px;color:var(--c-text3);margin-top:4px">'+fmtF(u.fecha)+' · Pozo: '+u.caudalPozo?.toFixed(2)+' m³/h · Conc.: '+u.concMezcla?.toFixed(3)+' g Cl/L</div></div>';}
+  else eld.innerHTML='<div class="empty" style="padding:1rem 0">Sin dosis calculada aún.</div>';
+  var puntos=['Salida estanque','Red media','Extremo red','Otro'],bhtml='';
+  puntos.forEach(function(p){var meds=state.cloro.filter(c=>c.punto===p);if(!meds.length)return;var u=meds[0],est=cloroEst(u.cloro),tagCls=est?'tag-'+est.tag:'tag-blue';bhtml+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--c-border2);font-size:12px"><span style="color:var(--c-text3)">'+p+'</span><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--c-text3)">'+fmtF(u.fecha)+'</span><span class="tag '+tagCls+'" style="font-family:var(--mono)">'+u.cloro+' mg/L</span></div></div>';});
+  document.getElementById('inf-bitacora').innerHTML=bhtml?'<div class="card" style="padding:.7rem 1rem">'+bhtml+'</div>':'<div class="empty">Sin datos</div>';
+  var er=document.getElementById('inf-r-tbl');
+  if(!state.recargas.length){er.innerHTML='<div class="empty">Sin datos</div>';return;}
+  er.innerHTML='<table class="tbl"><thead><tr><th>Fecha</th><th>Horóm.</th><th>Vol.</th><th>Dosis</th></tr></thead><tbody>'+state.recargas.slice(0,6).map(r=>'<tr><td>'+fmtF(r.fecha)+'</td><td style="font-family:var(--mono)">'+r.horometro+'h</td><td style="font-family:var(--mono)">'+r.volCargado+'L</td><td>'+(r.dosis!=null?'<span class="tag tag-'+(r.dosis<=2?'green':'red')+'" style="font-family:var(--mono)">'+r.dosis.toFixed(2)+'</span>':'—')+'</td></tr>').join('')+'</tbody></table>';
+}
+
+function exportCSV(tipo){
+  var data=tipo==='recargas'?state.recargas:state.cloro;if(!data.length){alert('Sin datos.');return;}
+  var h,rows;
+  if(tipo==='recargas'){h='Fecha,Horometro_h,Caudalimetro_m3,Nivel_Ini_L,Nivel_Fin_L,Vol_Cargado_L,Hipo_real_val,Hipo_unidad,Hipo_recomendado_ml,Agua_L,Cl_activo_g,Conc_mezcla_gClL,Caudal_pozo_m3h,Dosis_mgClL,Receta_vigente,Responsable,Registrado_por\n';rows=data.map(r=>[r.fecha,r.horometro,r.caudal,r.nivelIni,r.nivelFin,r.volCargado,r.hipoVal||'',r.hipoUnidad||'',r.hipoRecomendado?.toFixed(1)||'',r.aguaL||'',r.grClActivo?.toFixed(3)||'',r.concMezcla?.toFixed(4)||'',r.caudalPozo?.toFixed(3)||'',r.dosis?.toFixed(3)||'',r.recetaVigente||'',r.responsable,r.creadoPor||''].join(',')).join('\n');}
+  else{h='Fecha,Punto,Cloro_mgL,Turbiedad_UNT,pH,Temperatura_C,Responsable,Latitud,Longitud,Registrado_por\n';rows=data.map(c=>[c.fecha,c.punto,c.cloro,c.turb||'',c.ph||'',c.temp||'',c.responsable,c.lat||'',c.lng||'',c.creadoPor||''].join(',')).join('\n');}
+  var blob=new Blob([h+rows],{type:'text/csv'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='CloroTrack_'+tipo+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js").then(()=>console.log("SW registered")).catch(e=>console.log("SW error",e));}</script>
+</body>
+</html>
