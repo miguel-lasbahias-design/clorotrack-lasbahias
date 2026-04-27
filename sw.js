@@ -1,7 +1,8 @@
-const CACHE_NAME = 'clorotrack-v10';
+const CACHE_NAME = 'clorotrack-v11';
 const ASSETS = [
   '/',
   '/index.html',
+  '/manual.html',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png'
