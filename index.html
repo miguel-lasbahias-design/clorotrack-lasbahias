@@ -1209,9 +1209,30 @@ function renderAlertas() {
     });
   }
   var hist=document.getElementById('alertas-hist');
-  hist.innerHTML = state.alertasHist.length
-    ? '<div class="card">'+state.alertasHist.slice(0,15).map(h=>'<div class="hist-row"><div><span style="font-weight:500;color:var(--c-text);font-size:12px">'+h.titulo+'</span><br><span style="font-size:11px;color:var(--c-text3)">'+fmtF(h.fecha)+'</span></div><span class="tag tag-'+({crit:'red',warn:'warn',info:'blue'}[h.nivel]||'blue')+'">'+h.nivel+'</span></div>').join('')+'</div>'
-    : '<div class="empty">Sin historial</div>';
+  if (!state.alertasHist.length) { hist.innerHTML='<div class="empty">Sin historial</div>'; return; }
+  var noRev = state.alertasHist.filter(h=>!h.revisada);
+  var rev = state.alertasHist.filter(h=>h.revisada);
+  var sorted = noRev.concat(rev).slice(0,20);
+  hist.innerHTML = '<div class="card">'+sorted.map(h=>{
+    var isRev = h.revisada;
+    var tagCls = isRev ? 'tag-accent' : 'tag-'+({crit:'red',warn:'warn',info:'blue'}[h.nivel]||'blue');
+    var style = isRev ? 'opacity:.5;' : '';
+    return '<div class="hist-row" style="flex-wrap:wrap;'+style+'"><div style="flex:1;min-width:0"><span style="font-weight:500;color:var(--c-text);font-size:12px">'+h.titulo+'</span><br><span style="font-size:11px;color:var(--c-text3)">'+fmtF(h.fecha)+'</span>'
+      +(isRev?'<br><span style="font-size:10px;color:var(--c-text3)">Revisada el '+fmtF(h.fechaRevisada)+'</span>':'')
+      +'</div><div style="display:flex;align-items:center;gap:6px"><span class="tag '+tagCls+'">'+(isRev?'revisada':h.nivel)+'</span>'
+      +(!isRev?'<button class="btn-complete" onclick="marcarRevisada(\''+h.id+'\')" title="Marcar revisada">✓</button>':'')
+      +(isAdmin()?'<button class="btn-del" onclick="eliminarRegistro(\'alertasHist\',\''+h.id+'\',\'alerta\')">✕</button>':'')
+      +'</div></div>';
+  }).join('')+'</div>';
+}
+
+async function marcarRevisada(id) {
+  try {
+    await db.collection('clorotrack').doc('data').collection('alertasHist').doc(id).update({
+      revisada: true,
+      fechaRevisada: new Date().toISOString()
+    });
+  } catch(e) { alert('Error: '+e.message); }
 }
 
 function renderAlertasInline() {
