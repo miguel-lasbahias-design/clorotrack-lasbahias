@@ -1339,6 +1339,65 @@ async function guardarCloro(){
 }
 
 // ===== ELIMINAR REGISTROS =====
+// ===== COMPLETAR REGISTROS INCOMPLETOS =====
+function camposFaltantes(r) {
+  var faltantes = [];
+  if (r.hipoVal == null) faltantes.push('hipoVal');
+  if (r.aguaL == null) faltantes.push('aguaL');
+  if (r.dosis == null && r.hipoVal != null) faltantes.push('dosis');
+  if (r.caudalPozo == null) faltantes.push('caudalPozo');
+  return faltantes;
+}
+var editingRecargaId = null;
+function abrirCompletarRegistro(id) {
+  var r = state.recargas.find(x => x.id === id);
+  if (!r) return;
+  editingRecargaId = id;
+  var faltantes = camposFaltantes(r);
+  var labels = { hipoVal: 'Hipoclorito real (ml)', aguaL: 'Agua real (L)', caudalPozo: 'Caudal pozo (m³/h)' };
+  var html = '<div class="card-accent" id="edit-form-'+id+'" style="margin-top:8px">'
+    + '<div style="font-size:11px;font-weight:600;color:var(--c-accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Completar registro — '+fmtF(r.fecha)+'</div>';
+  faltantes.forEach(function(f) {
+    if (f === 'dosis') return;
+    html += '<div class="fld"><span class="lbl">'+labels[f]+'</span><input type="number" id="edit-'+f+'" class="inp" step="0.1"></div>';
+  });
+  html += '<div style="display:flex;gap:8px"><button class="btn btn-sm" onclick="guardarCompletarRegistro(\''+id+'\')">Guardar</button><button class="btn btn-sec btn-sm" onclick="cerrarCompletarRegistro(\''+id+'\')">Cancelar</button></div></div>';
+  var card = document.querySelector('[data-recarga-id="'+id+'"]');
+  if (card) { var existing = document.getElementById('edit-form-'+id); if (existing) existing.remove(); card.insertAdjacentHTML('beforeend', html); }
+}
+function cerrarCompletarRegistro(id) { var el = document.getElementById('edit-form-'+id); if (el) el.remove(); editingRecargaId = null; }
+async function guardarCompletarRegistro(id) {
+  var r = state.recargas.find(x => x.id === id);
+  if (!r) return;
+  var updates = {};
+  var hipoEl = document.getElementById('edit-hipoVal');
+  var aguaEl = document.getElementById('edit-aguaL');
+  var cpEl = document.getElementById('edit-caudalPozo');
+  if (hipoEl && hipoEl.value) updates.hipoVal = parseFloat(hipoEl.value);
+  if (aguaEl && aguaEl.value) updates.aguaL = parseFloat(aguaEl.value);
+  if (cpEl && cpEl.value) updates.caudalPozo = parseFloat(cpEl.value);
+  // Recalculate derived fields if possible
+  var hv = updates.hipoVal || r.hipoVal;
+  var al = updates.aguaL || r.aguaL;
+  var cp = updates.caudalPozo || r.caudalPozo;
+  if (hv && al) {
+    var pConc = getParam('conc_comercial'), pDens = getParam('densidad'), pInj = getParam('inyeccion');
+    var grHipo = hv * (pDens.val || 1.12);
+    updates.grClActivo = grHipo * ((pConc.val || 10) / 100);
+    updates.concMezcla = updates.grClActivo / al;
+    updates.hipoUnidad = r.hipoUnidad || 'ml';
+    if (cp && pInj.val) {
+      var injMl = pInj.unit === 'gr/min' ? pInj.val / (pDens.val || 1.12) : pInj.val;
+      updates.dosis = (updates.concMezcla * (injMl / 1000) / ((cp * 1000) / 60)) * 1000;
+    }
+  }
+  if (!Object.keys(updates).length) { alert('Ingresa al menos un valor.'); return; }
+  try {
+    await db.collection('clorotrack').doc('data').collection('recargas').doc(id).update(updates);
+    cerrarCompletarRegistro(id);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
 async function eliminarRegistro(col, id, label) {
   if (!confirm('¿Eliminar este registro de '+label+'?\n\nEsta acción no se puede deshacer.')) return;
   try {
@@ -1353,7 +1412,8 @@ function renderHistR(){
   el.innerHTML=state.recargas.map(r=>{
     var dt=r.dosis!=null?'<span class="tag tag-'+(r.dosis<0.2||r.dosis>2?'red':r.dosis<=2?'green':'warn')+'" style="margin-left:4px;font-family:var(--mono)">'+r.dosis.toFixed(2)+' mg/L</span>':'';
     var dv='';if(r.hipoVal&&r.hipoRecomendado){var d=r.hipoVal-r.hipoRecomendado;if(Math.abs(d)>2)dv='<span style="font-size:10px;color:var(--c-text3)"> Δ'+(d>0?'+':'')+d.toFixed(0)+'</span>';}
-    return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:500;color:var(--c-text)">'+fmtF(r.fecha)+'</span><div><span class="tag tag-blue">+'+r.volCargado+' L</span>'+dt+'</div></div>'
+    var falt=camposFaltantes(r), btnComplete=falt.length&&falt.some(f=>f!=='dosis')?'<button class="btn-complete" onclick="abrirCompletarRegistro(\''+r.id+'\')">Completar registro</button>':'';
+    return '<div class="card" data-recarga-id="'+r.id+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:13px;font-weight:500;color:var(--c-text)">'+fmtF(r.fecha)+'</span><div><span class="tag tag-blue">+'+r.volCargado+' L</span>'+dt+'</div></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 14px;font-size:12px;color:var(--c-text3)">'
     +'<span>Horóm.: <b style="color:var(--c-accent);font-family:var(--mono)">'+r.horometro+' h</b></span><span>Caudal: <b style="color:var(--c-accent);font-family:var(--mono)">'+r.caudal?.toLocaleString('es-CL')+' m³</b></span>'
     +'<span>Ini: <b style="color:var(--c-text)">'+r.nivelIni+' L</b></span><span>Fin: <b style="color:var(--c-text)">'+r.nivelFin+' L</b></span>'
@@ -1364,8 +1424,10 @@ function renderHistR(){
     +(r.responsable&&r.responsable!=='—'?'<span style="grid-column:span 2">Resp.: <b style="color:var(--c-text)">'+r.responsable+'</b></span>':'')
     +(r.creadoPor?'<span style="grid-column:span 2;font-size:10px;color:var(--c-text3)">Registrado por: '+r.creadoPor+'</span>':'')
     +'</div>'
-    +(isAdmin()?'<div style="margin-top:8px;display:flex;gap:6px;justify-content:flex-end"><button class="btn-del" onclick="eliminarRegistro(\'recargas\',\''+r.id+'\',\'recarga\')">Eliminar</button></div>':'')
-    +'</div>';
+    +'<div style="margin-top:8px;display:flex;gap:6px;justify-content:flex-end">'
+    +btnComplete
+    +(isAdmin()?'<button class="btn-del" onclick="eliminarRegistro(\'recargas\',\''+r.id+'\',\'recarga\')">Eliminar</button>':'')
+    +'</div></div>';
   }).join('');
 }
 
