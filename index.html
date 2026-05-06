@@ -1194,7 +1194,7 @@ function renderAlertas() {
     cont.innerHTML = alertas.map(a=>'<div class="alerta al-'+a.nivel+'"><div class="alerta-icon">'+(a.nivel==='crit'?'!!':a.nivel==='warn'?'!':'i')+'</div><div class="alerta-body"><div class="alerta-title">'+a.titulo+'</div><div class="alerta-sub">'+a.sub+'</div><button class="alerta-accion" onclick="'+a.fn+'">'+a.accion+' →</button></div></div>').join('');
     // Guardar en Firestore (dedup 48h)
     alertas.filter(a=>a.nivel!=='info').forEach(async a=>{
-      var ya = state.alertasHist.find(h=>h.tipo===a.tipo && (Date.now()-new Date(h.fecha).getTime())<172800000);
+      var ya = state.alertasHist.find(h=>h.tipo===a.tipo && (Date.now()-new Date(h.fecha).getTime())<21600000);
       if (!ya) {
         try { await db.collection('clorotrack').doc('data').collection('alertasHist').add({fecha:new Date().toISOString(),nivel:a.nivel,tipo:a.tipo,titulo:a.titulo}); } catch(e){}
       }
