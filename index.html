@@ -606,10 +606,11 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
     <div class="fld"><span class="lbl">Observaciones</span><textarea id="r-obs" class="inp" rows="2" placeholder="Opcional..."></textarea></div>
     <div class="sep"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span class="sec-title" style="margin:0">Medición de cloro (opcional)</span>
+      <span class="sec-title" style="margin:0">Medición de cloro libre en red AP (opcional)</span>
       <button class="btn btn-sec btn-sm" onclick="toggleCloroR()" id="btn-cr-toggle">+ Agregar</button>
     </div>
     <div id="cloro-en-r" style="display:none">
+      <div style="font-size:11px;color:var(--c-text3);margin-bottom:10px;padding:6px 10px;background:var(--c-bg2);border-radius:var(--r2)">Cloro libre medido en el agua potable distribuida — no de la mezcla del estanque</div>
       <div class="row2">
         <div class="fld"><span class="lbl">Punto muestreo</span>
           <select id="rc-punto" class="inp"><option>Salida estanque</option><option>Red media</option><option>Extremo red</option><option>Otro</option></select>
