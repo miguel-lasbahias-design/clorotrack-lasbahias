@@ -487,6 +487,7 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
   <!-- RECARGA -->
   <div id="sec-recarga" class="sec active">
     <div id="alert-r" class="alert-ok"></div>
+    <div id="estimacion-recarga" style="display:none;margin-bottom:8px"></div>
     <div id="alertas-inline"></div>
 
     <div class="sync-bar"><div class="sync-dot" id="sync-dot-r"></div><span id="sync-txt-r">Conectado · datos en tiempo real</span></div>
@@ -911,6 +912,7 @@ function initListeners() {
       state.recargas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       updateBadges();
       renderAlertasInline();
+      renderEstimacionRecarga();
       renderAlertas();
     }, err => setSyncError('r', err));
 
@@ -1262,6 +1264,39 @@ async function marcarRevisada(id) {
       fechaRevisada: new Date().toISOString()
     });
   } catch(e) { alert('Error: '+e.message); }
+}
+
+// ===== ESTIMACIÓN PRÓXIMA RECARGA =====
+function estimarProximaRecarga() {
+  if (state.recargas.length < 2) return null;
+  var r0 = state.recargas[0], r1 = state.recargas[1];
+  if (!r0.horometro || !r1.horometro || !r0.nivelFin || !r1.nivelFin) return null;
+  var deltaHor = r0.horometro - r1.horometro;
+  var volConsumido = r1.nivelFin - r0.nivelIni;
+  if (deltaHor <= 0 || volConsumido <= 0) return null;
+  var consumoPorHora = volConsumido / deltaHor;
+  var nivelActual = r0.nivelFin;
+  var nivelMinimo = 20;
+  var litrosRestantes = nivelActual - nivelMinimo;
+  if (litrosRestantes <= 0) return { horasRestantes: 0, dias: 0, nivel: 'crit' };
+  var horasRestantes = litrosRestantes / consumoPorHora;
+  var dias = horasRestantes / 24;
+  var nivel = horasRestantes < 24 ? 'crit' : horasRestantes < 48 ? 'warn' : 'info';
+  return { horasRestantes: Math.round(horasRestantes), dias: dias.toFixed(1), nivel, consumoPorHora: consumoPorHora.toFixed(2), nivelActual };
+}
+
+function renderEstimacionRecarga() {
+  var est = estimarProximaRecarga();
+  var container = document.getElementById('estimacion-recarga');
+  if (!container) return;
+  if (!est) { container.style.display = 'none'; return; }
+  container.style.display = 'block';
+  var cls = est.nivel === 'crit' ? 'al-crit' : est.nivel === 'warn' ? 'al-warn' : 'al-info';
+  var icon = est.nivel === 'crit' ? '!!' : est.nivel === 'warn' ? '!' : 'i';
+  var titulo = est.horasRestantes === 0 ? 'Estanque en nivel crítico — recarga urgente'
+    : 'Próxima recarga estimada en '+est.horasRestantes+' h (~'+est.dias+' días)';
+  var sub = 'Nivel actual: '+est.nivelActual+' L · Consumo: '+est.consumoPorHora+' L/h operada · Umbral: 20 L';
+  container.innerHTML = '<div class="alerta '+cls+'"><div class="alerta-icon">'+icon+'</div><div class="alerta-body"><div class="alerta-title">'+titulo+'</div><div class="alerta-sub">'+sub+'</div></div></div>';
 }
 
 function renderAlertasInline() {
