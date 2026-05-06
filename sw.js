@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clorotrack-v11';
+const CACHE_NAME = 'clorotrack-v12';
 const ASSETS = [
   '/',
   '/index.html',
@@ -29,6 +29,7 @@ self.addEventListener('fetch', event => {
   if (event.request.url.includes('firebase') ||
       event.request.url.includes('anthropic') ||
       event.request.url.includes('google') ||
+      event.request.url.includes('cdn.jsdelivr.net') ||
       event.request.url.includes('/.netlify/functions/')) {
     return;
   }

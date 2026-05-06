@@ -11,6 +11,9 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <!-- Firebase v9 compat (CDN) -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -419,6 +422,28 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
 .btn-complete { padding:3px 8px; font-size:10px; border-radius:4px; border:1px solid rgba(245,158,11,.3); background:transparent; color:var(--c-warn); cursor:pointer; font-family:var(--font); }
 .btn-complete:hover { background:var(--c-warn-bg); }
 
+/* ===== CHART CONTAINERS ===== */
+.chart-container { background:var(--c-bg3); border:1px solid var(--c-border2); border-radius:var(--r); padding:12px; margin-bottom:12px; }
+.chart-container canvas { max-height:250px; }
+.chart-period { display:flex; gap:3px; margin-bottom:8px; }
+.chart-period button { padding:3px 10px; border:1px solid var(--c-border); background:transparent; color:var(--c-text3); border-radius:4px; font-size:10px; cursor:pointer; font-family:var(--font); }
+.chart-period button.active { background:var(--c-surface); color:var(--c-accent); border-color:var(--c-accent); }
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  body { background:#fff !important; color:#111 !important; font-size:11px; }
+  #app, .hdr, .bottom-nav, .sync-bar, .btn, .btn-sec, .btn-del, .btn-complete, .nav-btn, .alerta, #alertas-inline, #estimacion-recarga, .chart-container, .chart-period { display:none !important; }
+  #print-report { display:block !important; color:#111; }
+  #print-report h1 { font-size:16px; margin-bottom:4px; }
+  #print-report h2 { font-size:13px; margin:14px 0 6px; border-bottom:1px solid #ccc; padding-bottom:3px; }
+  #print-report table { width:100%; border-collapse:collapse; font-size:10px; margin-bottom:10px; }
+  #print-report th, #print-report td { border:1px solid #ccc; padding:3px 5px; text-align:left; }
+  #print-report th { background:#f0f0f0; font-weight:600; }
+  #print-report .print-footer { margin-top:30px; font-size:10px; color:#666; }
+  #print-report .print-firma { margin-top:40px; display:flex; gap:40px; }
+  #print-report .print-firma div { border-top:1px solid #111; padding-top:4px; min-width:150px; font-size:10px; }
+}
+
 /* ===== LOADING ===== */
 #loading-screen {
   position: fixed; inset: 0; z-index: 999;
@@ -454,7 +479,7 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
     Iniciar sesión con Google
   </button>
   <div id="login-error" style="font-size:12px;color:var(--c-danger);margin-top:1rem;display:none"></div>
-  <div class="login-version">v7.0 · Firebase · Las Bahías OS</div>
+  <div class="login-version">v8.0 · Firebase · Las Bahías OS</div>
 </div>
 
 <!-- APP -->
@@ -747,12 +772,49 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
     <div id="inf-bitacora"></div>
     <div class="sec-title" style="margin-top:.9rem">Últimas recargas</div>
     <div id="inf-r-tbl"></div>
+
+    <div class="sep"></div>
+    <div class="sec-title">Tendencia cloro libre</div>
+    <div class="chart-period" id="cloro-period">
+      <button class="active" onclick="setChartPeriod(30)">30d</button>
+      <button onclick="setChartPeriod(60)">60d</button>
+      <button onclick="setChartPeriod(90)">90d</button>
+      <button onclick="setChartPeriod(0)">Todo</button>
+    </div>
+    <div class="chart-container"><canvas id="chart-cloro"></canvas></div>
+
+    <div class="sec-title">Consumo hipoclorito por recarga</div>
+    <div class="chart-container"><canvas id="chart-consumo"></canvas></div>
+
+    <div class="sec-title">Dosis calculada vs cloro medido</div>
+    <div id="tabla-comparativa"></div>
+
+    <div class="sep"></div>
+    <div class="sec-title">Generar PDF</div>
+    <div class="row2" style="margin-bottom:8px">
+      <div class="fld"><span class="lbl">Mes</span>
+        <select id="pdf-mes" class="inp"></select>
+      </div>
+      <div class="fld"><span class="lbl">Año</span>
+        <select id="pdf-anio" class="inp"></select>
+      </div>
+    </div>
+    <div class="row2" style="margin-bottom:12px">
+      <button class="btn" onclick="generarInformeMensual()">Informe mensual</button>
+      <button class="btn btn-sec" onclick="generarBitacoraPDF()">Bitácora operacional</button>
+    </div>
+    <div class="row2" style="margin-bottom:12px">
+      <div class="fld"><span class="lbl">Desde</span><input type="date" id="bit-desde" class="inp"></div>
+      <div class="fld"><span class="lbl">Hasta</span><input type="date" id="bit-hasta" class="inp"></div>
+    </div>
     <div class="sep"></div>
     <div class="row2" id="csv-export-btns">
       <button class="btn btn-sec" onclick="exportCSV('recargas')">CSV Recargas</button>
       <button class="btn btn-sec" onclick="exportCSV('cloro')">CSV Cloro</button>
     </div>
   </div>
+  <!-- Print report container (hidden, shown only during print) -->
+  <div id="print-report" style="display:none"></div>
 
   <!-- USUARIOS (admin only) -->
   <div id="sec-usuarios" class="sec">
@@ -1567,6 +1629,11 @@ function renderInforme(){
   var er=document.getElementById('inf-r-tbl');
   if(!state.recargas.length){er.innerHTML='<div class="empty">Sin datos</div>';return;}
   er.innerHTML='<table class="tbl"><thead><tr><th>Fecha</th><th>Horóm.</th><th>Vol.</th><th>Dosis</th></tr></thead><tbody>'+state.recargas.slice(0,6).map(r=>'<tr><td>'+fmtF(r.fecha)+'</td><td style="font-family:var(--mono)">'+r.horometro+'h</td><td style="font-family:var(--mono)">'+r.volCargado+'L</td><td>'+(r.dosis!=null?'<span class="tag tag-'+(r.dosis<=2?'green':'red')+'" style="font-family:var(--mono)">'+r.dosis.toFixed(2)+'</span>':'—')+'</td></tr>').join('')+'</tbody></table>';
+  // Charts and tables
+  renderChartCloro();
+  renderChartConsumo();
+  renderTablaComparativa();
+  initPdfSelectors();
 }
 
 // ===== USER ROLE MANAGEMENT =====
@@ -1648,6 +1715,215 @@ async function toggleUsuarioActivo(email, activo) {
     await db.collection('clorotrack').doc('usuarios').collection('list').doc(email).update({ activo });
     renderUsuarios();
   } catch(e) { alert('Error: '+e.message); }
+}
+
+// ===== CHARTS =====
+var chartCloro = null, chartConsumo = null, chartPeriodDays = 30;
+
+function setChartPeriod(days) {
+  chartPeriodDays = days;
+  document.querySelectorAll('#cloro-period button').forEach((b,i) => b.classList.toggle('active', [30,60,90,0][i]===days));
+  renderChartCloro();
+}
+
+function renderChartCloro() {
+  var canvas = document.getElementById('chart-cloro');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (chartCloro) chartCloro.destroy();
+  var cutoff = chartPeriodDays ? new Date(Date.now() - chartPeriodDays*864e5).toISOString() : '2000-01-01';
+  var filtered = state.cloro.filter(c => c.fecha >= cutoff).reverse();
+  var puntos = ['Salida estanque','Red media','Extremo red'];
+  var colors = ['#2DD4A8','#F59E0B','#38BDF8'];
+  var datasets = puntos.map((p,i) => {
+    var meds = filtered.filter(c => c.punto === p);
+    return { label:p, data:meds.map(m=>({x:m.fecha.slice(0,10),y:m.cloro})), borderColor:colors[i], backgroundColor:colors[i]+'33', tension:.3, pointRadius:3, borderWidth:2 };
+  }).filter(d => d.data.length);
+  chartCloro = new Chart(canvas, {
+    type:'line',
+    data:{ datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        x:{ type:'category', ticks:{ color:'#6BA39B', font:{size:9}, maxTicksLimit:8 }, grid:{ color:'#1F5750' } },
+        y:{ min:0, ticks:{ color:'#6BA39B', font:{size:9} }, grid:{ color:'#1F5750' } }
+      },
+      plugins:{
+        legend:{ labels:{ color:'#9ECEC7', font:{size:10} } },
+        annotation: undefined
+      }
+    },
+    plugins:[{
+      id:'refLines',
+      afterDraw:function(chart){
+        var yScale=chart.scales.y, ctx=chart.ctx;
+        [0.2,2.0].forEach(function(val){
+          var y=yScale.getPixelForValue(val);
+          ctx.save(); ctx.strokeStyle='#EF4444'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+          ctx.beginPath(); ctx.moveTo(chart.chartArea.left,y); ctx.lineTo(chart.chartArea.right,y); ctx.stroke();
+          ctx.fillStyle='#EF4444'; ctx.font='9px sans-serif'; ctx.fillText(val+' mg/L',chart.chartArea.left+4,y-4);
+          ctx.restore();
+        });
+      }
+    }]
+  });
+}
+
+function renderChartConsumo() {
+  var canvas = document.getElementById('chart-consumo');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (chartConsumo) chartConsumo.destroy();
+  var recs = state.recargas.slice(0,10).reverse();
+  if (recs.length < 2) return;
+  var labels=[], volData=[], diasData=[];
+  for (var i=0; i<recs.length; i++) {
+    labels.push(fmtF(recs[i].fecha).slice(0,8));
+    var consumed = i>0 ? (recs[i-1].nivelFin||0) - (recs[i].nivelIni||0) : 0;
+    volData.push(Math.max(0,consumed));
+    if (i>0) {
+      var d = (new Date(recs[i].fecha) - new Date(recs[i-1].fecha)) / 864e5;
+      diasData.push(d.toFixed(1));
+    } else diasData.push(0);
+  }
+  chartConsumo = new Chart(canvas, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'Consumido (L)', data:volData, backgroundColor:'#2DD4A833', borderColor:'#2DD4A8', borderWidth:1 },
+        { label:'Días entre recargas', data:diasData, type:'line', borderColor:'#F59E0B', backgroundColor:'#F59E0B33', yAxisID:'y1', tension:.3, pointRadius:3, borderWidth:2 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        x:{ ticks:{ color:'#6BA39B', font:{size:9} }, grid:{ color:'#1F5750' } },
+        y:{ position:'left', ticks:{ color:'#6BA39B', font:{size:9} }, grid:{ color:'#1F5750' }, title:{ display:true, text:'Litros', color:'#6BA39B', font:{size:9} } },
+        y1:{ position:'right', ticks:{ color:'#F59E0B', font:{size:9} }, grid:{ display:false }, title:{ display:true, text:'Días', color:'#F59E0B', font:{size:9} } }
+      },
+      plugins:{ legend:{ labels:{ color:'#9ECEC7', font:{size:10} } } }
+    }
+  });
+}
+
+function renderTablaComparativa() {
+  var el = document.getElementById('tabla-comparativa');
+  if (!el) return;
+  var conDosis = state.recargas.filter(r => r.dosis != null).slice(0,10);
+  if (!conDosis.length || !state.cloro.length) { el.innerHTML = '<div class="empty">Sin datos suficientes</div>'; return; }
+  var rows = conDosis.map(r => {
+    var fR = new Date(r.fecha).getTime();
+    var closest = state.cloro.reduce((best, c) => {
+      var d = Math.abs(new Date(c.fecha).getTime() - fR);
+      return d < best.d ? { c, d } : best;
+    }, { c: null, d: Infinity });
+    if (!closest.c) return null;
+    var diff = Math.abs(r.dosis - closest.c.cloro);
+    var estado = diff < 0.4 ? 'green' : diff <= 0.8 ? 'warn' : 'red';
+    return { fechaR:fmtF(r.fecha), dosis:r.dosis.toFixed(2), fechaC:fmtF(closest.c.fecha), cloro:closest.c.cloro.toFixed(2), diff:diff.toFixed(2), estado };
+  }).filter(Boolean);
+  if (!rows.length) { el.innerHTML = '<div class="empty">Sin comparaciones disponibles</div>'; return; }
+  el.innerHTML = '<div class="card" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Recarga</th><th>Dosis</th><th>Medición</th><th>Cloro</th><th>Δ</th><th>Estado</th></tr></thead><tbody>'
+    + rows.map(r => '<tr><td>'+r.fechaR+'</td><td style="font-family:var(--mono)">'+r.dosis+'</td><td>'+r.fechaC+'</td><td style="font-family:var(--mono)">'+r.cloro+'</td><td style="font-family:var(--mono)">'+r.diff+'</td><td><span class="tag tag-'+r.estado+'">'+(r.estado==='green'?'OK':r.estado==='warn'?'Revisar':'Crítico')+'</span></td></tr>').join('')
+    + '</tbody></table></div>';
+}
+
+// ===== PDF GENERATION =====
+function initPdfSelectors() {
+  var mesEl = document.getElementById('pdf-mes'), anioEl = document.getElementById('pdf-anio');
+  if (!mesEl || mesEl.options.length) return;
+  var meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var now = new Date();
+  meses.forEach((m,i) => { var o=document.createElement('option'); o.value=i; o.textContent=m; if(i===now.getMonth()) o.selected=true; mesEl.appendChild(o); });
+  for (var y=now.getFullYear(); y>=now.getFullYear()-2; y--) { var o=document.createElement('option'); o.value=y; o.textContent=y; anioEl.appendChild(o); }
+  // Set bitacora dates
+  var desde = document.getElementById('bit-desde'), hasta = document.getElementById('bit-hasta');
+  if (desde) { var d=new Date(); d.setDate(1); desde.value=d.toISOString().slice(0,10); }
+  if (hasta) hasta.value = new Date().toISOString().slice(0,10);
+}
+
+function generarInformeMensual() {
+  var mes = parseInt(document.getElementById('pdf-mes').value);
+  var anio = parseInt(document.getElementById('pdf-anio').value);
+  var meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var desde = new Date(anio, mes, 1).toISOString();
+  var hasta = new Date(anio, mes+1, 0, 23, 59, 59).toISOString();
+  var recsM = state.recargas.filter(r => r.fecha >= desde && r.fecha <= hasta);
+  var cloroM = state.cloro.filter(c => c.fecha >= desde && c.fecha <= hasta);
+  var alertasM = state.alertasHist.filter(a => a.fecha >= desde && a.fecha <= hasta);
+  var volTotal = recsM.reduce((s,r) => s+(r.volCargado||0), 0);
+  var clProm = cloroM.length ? (cloroM.reduce((s,c)=>s+c.cloro,0)/cloroM.length).toFixed(2) : '—';
+  var dosisProm = recsM.filter(r=>r.dosis!=null).length ? (recsM.filter(r=>r.dosis!=null).reduce((s,r)=>s+r.dosis,0)/recsM.filter(r=>r.dosis!=null).length).toFixed(2) : '—';
+  var diasProm = recsM.length >= 2 ? (Math.round((new Date(recsM[0].fecha)-new Date(recsM[recsM.length-1].fecha))/(864e5*(recsM.length-1)))) : '—';
+  var pR=getParam('receta'), pInj=getParam('inyeccion'), pConc=getParam('conc_comercial'), pDens=getParam('densidad');
+  var html = '<h1>ENERGÍA Y AGUAS LAS BAHÍAS</h1>'
+    +'<p>Sistema de Agua Potable Rural — Aguas Las Bahías</p>'
+    +'<h1>INFORME MENSUAL DE CLORACIÓN</h1>'
+    +'<p>Mes: '+meses[mes]+' '+anio+' | Generado: '+new Date().toLocaleDateString('es-CL')+' | Responsable: '+(state.user?.displayName||state.user?.email||'—')+'</p>'
+    +'<h2>RESUMEN DEL PERÍODO</h2>'
+    +'<table><tbody>'
+    +'<tr><td>Total recargas realizadas</td><td><b>'+recsM.length+'</b></td></tr>'
+    +'<tr><td>Volumen total hipoclorito utilizado</td><td><b>'+volTotal+' L</b></td></tr>'
+    +'<tr><td>Total mediciones de cloro libre</td><td><b>'+cloroM.length+'</b></td></tr>'
+    +'<tr><td>Cloro libre promedio</td><td><b>'+clProm+' mg/L</b></td></tr>'
+    +'<tr><td>Dosis promedio calculada</td><td><b>'+dosisProm+' mg/L</b></td></tr>'
+    +'<tr><td>Días promedio entre recargas</td><td><b>'+diasProm+'</b></td></tr>'
+    +'<tr><td>Alertas generadas / Críticas</td><td><b>'+alertasM.length+' / '+alertasM.filter(a=>a.nivel==='crit').length+'</b></td></tr>'
+    +'</tbody></table>'
+    +'<h2>PARÁMETROS OPERACIONALES VIGENTES</h2>'
+    +'<table><tbody>'
+    +'<tr><td>Receta de mezcla</td><td>'+(pR.val?pR.val+' '+pR.unit:'No configurada')+'</td></tr>'
+    +'<tr><td>Caudal inyección</td><td>'+(pInj.val?pInj.val+' '+pInj.unit:'No configurado')+'</td></tr>'
+    +'<tr><td>Concentración hipoclorito</td><td>'+(pConc.val||10)+'%</td></tr>'
+    +'<tr><td>Densidad hipoclorito</td><td>'+(pDens.val||1.12)+' g/ml</td></tr>'
+    +'</tbody></table>'
+    +'<h2>REGISTRO DE RECARGAS</h2>'
+    +'<table><thead><tr><th>Fecha</th><th>Horóm.</th><th>Caudalím.</th><th>Vol.cons.</th><th>Hipo</th><th>Agua</th><th>Conc.mezcla</th><th>Dosis mg/L</th><th>Resp.</th></tr></thead><tbody>'
+    +recsM.map(r => '<tr><td>'+fmtF(r.fecha)+'</td><td>'+r.horometro+'</td><td>'+(r.caudal?.toLocaleString('es-CL')||'—')+'</td><td>'+r.volCargado+'L</td><td>'+(r.hipoVal||'—')+' '+(r.hipoUnidad||'')+'</td><td>'+(r.aguaL||'—')+'L</td><td>'+(r.concMezcla?.toFixed(3)||'—')+'</td><td>'+(r.dosis?.toFixed(2)||'—')+'</td><td>'+r.responsable+'</td></tr>').join('')
+    +'</tbody></table>'
+    +'<h2>REGISTRO DE CLORO LIBRE</h2>'
+    +'<table><thead><tr><th>Fecha</th><th>Punto</th><th>Cl mg/L</th><th>Turb.</th><th>pH</th><th>T°</th><th>Estado NCh409</th><th>Resp.</th></tr></thead><tbody>'
+    +cloroM.map(c => { var e=cloroEst(c.cloro); return '<tr><td>'+fmtF(c.fecha)+'</td><td>'+c.punto+'</td><td>'+c.cloro+'</td><td>'+(c.turb||'—')+'</td><td>'+(c.ph||'—')+'</td><td>'+(c.temp||'—')+'</td><td>'+(e?e.txt:'—')+'</td><td>'+c.responsable+'</td></tr>'; }).join('')
+    +'</tbody></table>'
+    +'<p style="margin-top:16px;font-size:10px"><b>NORMA APLICABLE:</b> NCh409 — Rango cloro libre: 0.2 a 2.0 mg/L</p>'
+    +'<div class="print-firma"><div>Firma: _________________<br>Cargo: Operador APR</div><div>Fecha: _________________</div></div>'
+    +'<div class="print-footer">Generado por CloroTrack — Aguas Las Bahías · '+new Date().toLocaleString('es-CL')+'</div>';
+  doPrint(html);
+}
+
+function generarBitacoraPDF() {
+  var desde = document.getElementById('bit-desde').value;
+  var hasta = document.getElementById('bit-hasta').value;
+  if (!desde||!hasta) { alert('Selecciona rango de fechas.'); return; }
+  var desdeISO = desde+'T00:00', hastaISO = hasta+'T23:59';
+  var eventos = [];
+  state.recargas.filter(r=>r.fecha>=desdeISO&&r.fecha<=hastaISO).forEach(r => {
+    eventos.push({ fecha:r.fecha, tipo:'RECARGA', desc:'Estanque '+r.nivelIni+'→'+r.nivelFin+'L, '+(r.hipoVal||'—')+' '+(r.hipoUnidad||'')+' hipo', valor:r.dosis?'Dosis: '+r.dosis.toFixed(2)+' mg/L':'—', resp:r.responsable });
+  });
+  state.cloro.filter(c=>c.fecha>=desdeISO&&c.fecha<=hastaISO).forEach(c => {
+    var e = cloroEst(c.cloro);
+    eventos.push({ fecha:c.fecha, tipo:'CLORO LIBRE', desc:c.punto, valor:c.cloro+' mg/L '+(e&&c.cloro>=0.2&&c.cloro<=2?'✓':'✗'), resp:c.responsable });
+  });
+  eventos.sort((a,b) => a.fecha.localeCompare(b.fecha));
+  var html = '<h1>ENERGÍA Y AGUAS LAS BAHÍAS</h1>'
+    +'<p>Sistema de Agua Potable Rural — Aguas Las Bahías</p>'
+    +'<h1>BITÁCORA OPERACIONAL</h1>'
+    +'<p>Período: '+desde+' a '+hasta+' | Generado: '+new Date().toLocaleDateString('es-CL')+'</p>'
+    +'<h2>REGISTRO CRONOLÓGICO</h2>'
+    +'<table><thead><tr><th>Fecha/Hora</th><th>Tipo</th><th>Descripción</th><th>Valor principal</th><th>Responsable</th></tr></thead><tbody>'
+    +eventos.map(e => '<tr><td>'+fmtF(e.fecha)+'</td><td>'+e.tipo+'</td><td>'+e.desc+'</td><td>'+e.valor+'</td><td>'+e.resp+'</td></tr>').join('')
+    +'</tbody></table>'
+    +'<p style="margin-top:8px;font-size:10px">Total eventos: '+eventos.length+'</p>'
+    +'<div class="print-firma"><div>Firma: _________________<br>Cargo: Operador APR</div><div>Fecha: _________________</div></div>'
+    +'<div class="print-footer">Generado por CloroTrack — Aguas Las Bahías · '+new Date().toLocaleString('es-CL')+'</div>';
+  doPrint(html);
+}
+
+function doPrint(html) {
+  var el = document.getElementById('print-report');
+  el.innerHTML = html;
+  el.style.display = 'block';
+  document.getElementById('app').style.display = 'none';
+  setTimeout(function(){ window.print(); el.style.display='none'; document.getElementById('app').style.display='block'; }, 300);
 }
 
 function exportCSV(tipo){
