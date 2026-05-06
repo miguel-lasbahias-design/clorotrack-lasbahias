@@ -413,6 +413,12 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
 /* ===== CLORO DOT ===== */
 .cloro-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; flex-shrink: 0; }
 
+/* ===== ADMIN BTNS ===== */
+.btn-del { padding:3px 8px; font-size:10px; border-radius:4px; border:1px solid rgba(239,68,68,.3); background:transparent; color:var(--c-danger); cursor:pointer; font-family:var(--font); }
+.btn-del:hover { background:var(--c-danger-bg); }
+.btn-complete { padding:3px 8px; font-size:10px; border-radius:4px; border:1px solid rgba(245,158,11,.3); background:transparent; color:var(--c-warn); cursor:pointer; font-family:var(--font); }
+.btn-complete:hover { background:var(--c-warn-bg); }
+
 /* ===== LOADING ===== */
 #loading-screen {
   position: fixed; inset: 0; z-index: 999;
@@ -798,6 +804,8 @@ const EMAILS_AUTORIZADOS = [
   'miguel@lasbahias.cl',
   'javier@lasbahias.cl'
 ];
+const ADMIN_EMAIL = 'miguel@lasbahias.cl';
+function isAdmin() { return state.user && state.user.email === ADMIN_EMAIL; }
 
 // ===== ESTADO LOCAL =====
 var state = {
@@ -1330,6 +1338,14 @@ async function guardarCloro(){
   }catch(e){alert('Error al guardar: '+e.message);}
 }
 
+// ===== ELIMINAR REGISTROS =====
+async function eliminarRegistro(col, id, label) {
+  if (!confirm('¿Eliminar este registro de '+label+'?\n\nEsta acción no se puede deshacer.')) return;
+  try {
+    await db.collection('clorotrack').doc('data').collection(col).doc(id).delete();
+  } catch(e) { alert('Error al eliminar: '+e.message); }
+}
+
 // ===== HISTORIAL =====
 function renderHistR(){
   var el=document.getElementById('hist-r-list');
@@ -1347,7 +1363,9 @@ function renderHistR(){
     +(r.caudalPozo?'<span>Pozo: <b style="color:var(--c-accent);font-family:var(--mono)">'+r.caudalPozo.toFixed(2)+' m³/h</b></span>':'')
     +(r.responsable&&r.responsable!=='—'?'<span style="grid-column:span 2">Resp.: <b style="color:var(--c-text)">'+r.responsable+'</b></span>':'')
     +(r.creadoPor?'<span style="grid-column:span 2;font-size:10px;color:var(--c-text3)">Registrado por: '+r.creadoPor+'</span>':'')
-    +'</div></div>';
+    +'</div>'
+    +(isAdmin()?'<div style="margin-top:8px;display:flex;gap:6px;justify-content:flex-end"><button class="btn-del" onclick="eliminarRegistro(\'recargas\',\''+r.id+'\',\'recarga\')">Eliminar</button></div>':'')
+    +'</div>';
   }).join('');
 }
 
@@ -1363,7 +1381,9 @@ function renderHistC(){
     +(c.ph?'<span>pH: <b>'+c.ph+'</b></span>':'')+(c.temp?'<span>T°: <b>'+c.temp+' °C</b></span>':'')
     +(c.enRecarga?'<span style="grid-column:span 2"><span class="tag tag-blue">junto a recarga</span></span>':'')
     +(c.creadoPor?'<span style="grid-column:span 2;font-size:10px">Registrado por: '+c.creadoPor+'</span>':'')
-    +'</div>'+geo+'</div>';
+    +'</div>'+geo
+    +(isAdmin()?'<div style="margin-top:8px;display:flex;gap:6px;justify-content:flex-end"><button class="btn-del" onclick="eliminarRegistro(\'cloro\',\''+c.id+'\',\'medición\')">Eliminar</button></div>':'')
+    +'</div>';
   }).join('');
 }
 
