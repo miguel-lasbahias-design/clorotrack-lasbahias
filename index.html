@@ -747,10 +747,28 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
     <div class="sec-title" style="margin-top:.9rem">Últimas recargas</div>
     <div id="inf-r-tbl"></div>
     <div class="sep"></div>
-    <div class="row2">
+    <div class="row2" id="csv-export-btns">
       <button class="btn btn-sec" onclick="exportCSV('recargas')">CSV Recargas</button>
       <button class="btn btn-sec" onclick="exportCSV('cloro')">CSV Cloro</button>
     </div>
+  </div>
+
+  <!-- USUARIOS (admin only) -->
+  <div id="sec-usuarios" class="sec">
+    <div class="sync-bar"><div class="sync-dot"></div><span>Gestión de usuarios</span></div>
+    <div class="sec-title">Usuarios registrados</div>
+    <div id="usuarios-list"></div>
+    <div class="sep"></div>
+    <div class="sec-title">Agregar usuario</div>
+    <div class="fld"><span class="lbl">Email</span><input type="email" id="nu-email" class="inp" placeholder="operador@lasbahias.cl"></div>
+    <div class="row2">
+      <div class="fld"><span class="lbl">Nombre</span><input type="text" id="nu-nombre" class="inp" placeholder="Nombre completo"></div>
+      <div class="fld"><span class="lbl">Rol</span>
+        <select id="nu-rol" class="inp"><option value="operador">Operador</option><option value="admin">Administrador</option></select>
+      </div>
+    </div>
+    <button class="btn" onclick="agregarUsuario()">Agregar usuario</button>
+    <div id="alert-u" class="alert-ok"></div>
   </div>
 
   <!-- BOTTOM NAV -->
@@ -779,6 +797,10 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
     <button class="nav-btn" onclick="navTo('informe')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
       Informe
+    </button>
+    <button class="nav-btn" id="nav-usuarios-btn" style="display:none" onclick="navTo('usuarios')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Usuarios
     </button>
   </div>
 
@@ -824,6 +846,8 @@ var DEFAULTS = {
   densidad:      { val:1.12, unit:'g/ml' }
 };
 var unsubscribers = [];
+var userRol = 'operador';
+var usuariosList = [];
 
 // ===== AUTH =====
 function loginGoogle() {
@@ -858,11 +882,15 @@ auth.onAuthStateChanged(user => {
   } else {
     document.getElementById('user-initials').textContent = user.displayName ? user.displayName[0].toUpperCase() : '?';
   }
-  initListeners();
-  setNow('r-fecha'); setNow('c-fecha'); setNow('p-fecha');
-  renderParamInput();
-  renderRecetaVigenteBox();
-  renderAlertasInline();
+  // Load user role from Firestore
+  loadUserRole(user.email).then(function() {
+    applyRoleRestrictions();
+    initListeners();
+    setNow('r-fecha'); setNow('c-fecha'); setNow('p-fecha');
+    renderParamInput();
+    renderRecetaVigenteBox();
+    renderAlertasInline();
+  });
 });
 
 function showUserMenu() {
@@ -952,13 +980,14 @@ function updateBadges() {
 function navTo(s) {
   document.querySelectorAll('.sec').forEach(x => x.classList.remove('active'));
   document.getElementById('sec-'+s).classList.add('active');
-  var map = {recarga:0,cloro:1,alertas:2,params:3,historial:4,informe:5};
+  var map = {recarga:0,cloro:1,alertas:2,params:3,historial:4,informe:5,usuarios:6};
   document.querySelectorAll('.nav-btn').forEach((b,i) => b.classList.toggle('active', i===map[s]));
   if (s==='historial') histTab('r');
   if (s==='informe') renderInforme();
   if (s==='params') { renderParamVigente(); renderParamInput(); renderParamHist(); }
   if (s==='recarga') { renderRecetaVigenteBox(); renderAlertasInline(); }
   if (s==='alertas') renderAlertas();
+  if (s==='usuarios') renderUsuarios();
 }
 function histTab(t) {
   ['r','c','b'].forEach(x => { document.getElementById('hist-'+x+'-list').style.display = x===t?'block':'none'; document.getElementById('htab-'+x).classList.toggle('active',x===t); });
@@ -1503,6 +1532,87 @@ function renderInforme(){
   var er=document.getElementById('inf-r-tbl');
   if(!state.recargas.length){er.innerHTML='<div class="empty">Sin datos</div>';return;}
   er.innerHTML='<table class="tbl"><thead><tr><th>Fecha</th><th>Horóm.</th><th>Vol.</th><th>Dosis</th></tr></thead><tbody>'+state.recargas.slice(0,6).map(r=>'<tr><td>'+fmtF(r.fecha)+'</td><td style="font-family:var(--mono)">'+r.horometro+'h</td><td style="font-family:var(--mono)">'+r.volCargado+'L</td><td>'+(r.dosis!=null?'<span class="tag tag-'+(r.dosis<=2?'green':'red')+'" style="font-family:var(--mono)">'+r.dosis.toFixed(2)+'</span>':'—')+'</td></tr>').join('')+'</tbody></table>';
+}
+
+// ===== USER ROLE MANAGEMENT =====
+async function loadUserRole(email) {
+  try {
+    var doc = await db.collection('clorotrack').doc('usuarios').collection('list').doc(email).get();
+    if (doc.exists) {
+      var data = doc.data();
+      userRol = data.rol || 'operador';
+      if (!data.activo) { auth.signOut(); alert('Tu cuenta ha sido desactivada. Contacta al administrador.'); return; }
+    } else if (email === ADMIN_EMAIL) {
+      userRol = 'admin';
+      // Auto-create admin user doc
+      await db.collection('clorotrack').doc('usuarios').collection('list').doc(email).set({
+        email: email, nombre: 'Miguel Barría', rol: 'admin', activo: true,
+        fechaAlta: new Date().toISOString()
+      });
+    } else {
+      userRol = 'operador';
+    }
+  } catch(e) { userRol = email === ADMIN_EMAIL ? 'admin' : 'operador'; }
+}
+
+function applyRoleRestrictions() {
+  var isOp = userRol === 'operador';
+  // Hide Parámetros tab for operadores
+  var navBtns = document.querySelectorAll('.nav-btn');
+  if (navBtns[3]) navBtns[3].style.display = isOp ? 'none' : '';
+  // Hide CSV export for operadores
+  var csvBtns = document.getElementById('csv-export-btns');
+  if (csvBtns) csvBtns.style.display = isOp ? 'none' : '';
+  // Show Usuarios tab for admin
+  var navU = document.getElementById('nav-usuarios-btn');
+  if (navU) navU.style.display = isAdmin() ? '' : 'none';
+}
+
+async function renderUsuarios() {
+  var el = document.getElementById('usuarios-list');
+  try {
+    var snap = await db.collection('clorotrack').doc('usuarios').collection('list').get();
+    usuariosList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { el.innerHTML = '<div class="empty">Error cargando usuarios</div>'; return; }
+  if (!usuariosList.length) { el.innerHTML = '<div class="empty">Sin usuarios registrados</div>'; return; }
+  el.innerHTML = usuariosList.map(u => {
+    var tagCls = u.activo ? 'tag-green' : 'tag-red';
+    var rolTag = u.rol === 'admin' ? '<span class="tag tag-accent">admin</span>' : '<span class="tag tag-blue">operador</span>';
+    return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<div><span style="font-size:13px;font-weight:500;color:var(--c-text)">'+u.nombre+'</span><br>'
+      +'<span style="font-size:11px;color:var(--c-text3)">'+u.email+'</span></div>'
+      +'<div style="display:flex;align-items:center;gap:6px">'+rolTag
+      +'<span class="tag '+tagCls+'">'+(u.activo?'activo':'inactivo')+'</span>'
+      +'<button class="btn-complete" onclick="toggleUsuarioActivo(\''+u.email+'\','+!u.activo+')">'+(u.activo?'Desactivar':'Activar')+'</button>'
+      +'</div></div>'
+      +(u.fechaAlta?'<div style="font-size:10px;color:var(--c-text3);margin-top:4px">Alta: '+fmtF(u.fechaAlta)+'</div>':'')
+      +'</div>';
+  }).join('');
+}
+
+async function agregarUsuario() {
+  var email = document.getElementById('nu-email').value.trim();
+  var nombre = document.getElementById('nu-nombre').value.trim();
+  var rol = document.getElementById('nu-rol').value;
+  if (!email || !nombre) { alert('Completa email y nombre.'); return; }
+  try {
+    await db.collection('clorotrack').doc('usuarios').collection('list').doc(email).set({
+      email, nombre, rol, activo: true, fechaAlta: new Date().toISOString()
+    });
+    // Also add to EMAILS_AUTORIZADOS if not present
+    if (!EMAILS_AUTORIZADOS.includes(email)) EMAILS_AUTORIZADOS.push(email);
+    document.getElementById('nu-email').value = '';
+    document.getElementById('nu-nombre').value = '';
+    showAlert('alert-u', 'Usuario agregado ✓');
+    renderUsuarios();
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+async function toggleUsuarioActivo(email, activo) {
+  try {
+    await db.collection('clorotrack').doc('usuarios').collection('list').doc(email).update({ activo });
+    renderUsuarios();
+  } catch(e) { alert('Error: '+e.message); }
 }
 
 function exportCSV(tipo){
