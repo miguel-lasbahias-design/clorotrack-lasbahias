@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "maquicontrol-561d0"
+  },
+  "targets": {
+    "maquicontrol-561d0": {
+      "hosting": {
+        "clorotrack": ["clorotrack-lasbahias"]
+      }
+    }
+  }
+}
