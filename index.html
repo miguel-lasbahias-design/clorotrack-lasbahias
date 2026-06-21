@@ -766,6 +766,7 @@ select.inp { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.
       <div class="stat"><div class="stat-val" id="s-dias">—</div><div class="stat-lbl">Días/recarga</div></div>
       <div class="stat"><div class="stat-val" id="s-alrts">0</div><div class="stat-lbl">Alertas cloro</div></div>
     </div>
+    <div id="inf-consumo-prom" style="text-align:center;font-size:12px;color:var(--c-text2);margin:-.3rem 0 .9rem"></div>
     <div class="sec-title">Última dosis calculada</div>
     <div id="inf-dosis" style="margin-bottom:12px"></div>
     <div class="sec-title">Estado cloro por punto</div>
@@ -1278,6 +1279,19 @@ function evaluarAlertas() {
       if (mp.slice(0,UMBRAL_CONSEC).every(c=>c.cloro>2.0)) alertas.push({nivel:'warn',tipo:'alto_'+punto,titulo:'Cloro elevado — '+punto,sub:UMBRAL_CONSEC+' mediciones > 2.0 mg/L (último: '+mp[0].cloro+' mg/L). Revisa dosificación.',accion:'Revisar',fn:"navTo('params')"});
     }
   });
+  // CAMBIO 2 — Tendencia decreciente del consumo de mezcla (L/h operada)
+  var perLh = consumoLhPeriodos();
+  if (perLh.length >= 3) {
+    var promLh = perLh.reduce((a,b)=>a+b,0)/perLh.length;
+    var ultLh = perLh[0];
+    if (promLh > 0 && ultLh < 0.85*promLh) {
+      var caidaLh = Math.round((1 - ultLh/promLh)*100);
+      alertas.push({nivel:'warn',tipo:'consumo_bajo',titulo:'Consumo de mezcla por debajo del promedio',sub:'El último período registró '+ultLh.toFixed(2)+' L/h operada vs promedio histórico de '+promLh.toFixed(2)+' L/h (caída del '+caidaLh+'%). Verifica caudal de inyección de la bomba dosificadora.',accion:'Ver historial',fn:"navTo('informe')"});
+      if (ultLh < 0.70*promLh) {
+        alertas.push({nivel:'crit',tipo:'consumo_critico',titulo:'Caída crítica en inyección de hipoclorito',sub:'Consumo '+ultLh.toFixed(2)+' L/h vs promedio '+promLh.toFixed(2)+' L/h (caída del '+caidaLh+'%). Riesgo de subdosificación. Cloro libre en red puede caer bajo norma NCh409. Revisar bomba dosificadora inmediatamente.',accion:'Ver historial',fn:"navTo('informe')"});
+      }
+    }
+  }
   return alertas;
 }
 
@@ -1328,6 +1342,32 @@ async function marcarRevisada(id) {
   } catch(e) { alert('Error: '+e.message); }
 }
 
+// ===== HELPERS: consumo de mezcla L/h y operación por día =====
+// L/h operada del período que TERMINA en la recarga i (state.recargas[0]=más reciente)
+function consumoLhRecarga(i){
+  var R=state.recargas, cur=R[i], prev=R[i+1];
+  if(!cur||!prev||cur.horometro==null||prev.horometro==null||cur.nivelIni==null||prev.nivelFin==null) return null;
+  var dHor=cur.horometro-prev.horometro, vol=prev.nivelFin-cur.nivelIni;
+  if(dHor<=0||vol<=0) return null;
+  return vol/dHor;
+}
+// Array de L/h por período (índice 0 = período más reciente)
+function consumoLhPeriodos(){
+  var out=[]; for(var i=0;i<state.recargas.length-1;i++){ var v=consumoLhRecarga(i); if(v!=null) out.push(v); } return out;
+}
+function promedioConsumoLh(){ var p=consumoLhPeriodos(); return p.length? p.reduce((a,b)=>a+b,0)/p.length : null; }
+// Promedio histórico de horas bomba por día calendario, sobre todos los períodos
+function horasPorDiaProm(){
+  var R=state.recargas, vals=[];
+  for(var i=0;i<R.length-1;i++){ var cur=R[i], prev=R[i+1];
+    if(cur.horometro==null||prev.horometro==null) continue;
+    var dHor=cur.horometro-prev.horometro, dDias=(new Date(cur.fecha)-new Date(prev.fecha))/864e5;
+    if(dHor>0&&dDias>0) vals.push(dHor/dDias);
+  }
+  return vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+}
+function fmtFecha(d){ var p=n=>String(n).padStart(2,'0'); return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear(); }
+
 // ===== ESTIMACIÓN PRÓXIMA RECARGA =====
 function estimarProximaRecarga() {
   if (state.recargas.length < 2) return null;
@@ -1340,11 +1380,17 @@ function estimarProximaRecarga() {
   var nivelActual = r0.nivelFin;
   var nivelMinimo = 20;
   var litrosRestantes = nivelActual - nivelMinimo;
-  if (litrosRestantes <= 0) return { horasRestantes: 0, dias: 0, nivel: 'crit' };
+  var horasPorDia = horasPorDiaProm();
+  if (litrosRestantes <= 0) {
+    return { horasRestantes: 0, diasCalendario: 0, fechaEstimada: new Date(r0.fecha), nivel: 'crit', consumoPorHora: consumoPorHora.toFixed(2), horasPorDia: horasPorDia, nivelActual: nivelActual };
+  }
   var horasRestantes = litrosRestantes / consumoPorHora;
-  var dias = horasRestantes / 24;
-  var nivel = horasRestantes < 24 ? 'crit' : horasRestantes < 48 ? 'warn' : 'info';
-  return { horasRestantes: Math.round(horasRestantes), dias: dias.toFixed(1), nivel, consumoPorHora: consumoPorHora.toFixed(2), nivelActual };
+  // días calendario hasta agotar la mezcla, según la operación real (h/día)
+  var diasCalendario = horasPorDia ? horasRestantes / horasPorDia : horasRestantes / 24;
+  var fechaEstimada = new Date(new Date(r0.fecha).getTime() + diasCalendario*864e5);
+  var diasDesdeHoy = (fechaEstimada.getTime() - Date.now())/864e5;
+  var nivel = diasDesdeHoy < 2 ? 'crit' : diasDesdeHoy < 5 ? 'warn' : 'info';
+  return { horasRestantes: Math.round(horasRestantes), diasCalendario: diasCalendario, fechaEstimada: fechaEstimada, nivel: nivel, consumoPorHora: consumoPorHora.toFixed(2), horasPorDia: horasPorDia, nivelActual: nivelActual };
 }
 
 function renderEstimacionRecarga() {
@@ -1355,9 +1401,18 @@ function renderEstimacionRecarga() {
   container.style.display = 'block';
   var cls = est.nivel === 'crit' ? 'al-crit' : est.nivel === 'warn' ? 'al-warn' : 'al-info';
   var icon = est.nivel === 'crit' ? '!!' : est.nivel === 'warn' ? '!' : 'i';
-  var titulo = est.horasRestantes === 0 ? 'Estanque en nivel crítico — recarga urgente'
-    : 'Próxima recarga estimada en '+est.horasRestantes+' h (~'+est.dias+' días)';
-  var sub = 'Nivel actual: '+est.nivelActual+' L · Consumo: '+est.consumoPorHora+' L/h operada · Umbral: 20 L';
+  var titulo;
+  if (est.horasRestantes === 0) {
+    titulo = 'Estanque en nivel crítico — recarga urgente';
+  } else {
+    var diasHoy = (est.fechaEstimada.getTime() - Date.now())/864e5;
+    var fechaTxt = fmtFecha(est.fechaEstimada);
+    titulo = diasHoy < 0
+      ? 'Recarga atrasada — estimada el '+fechaTxt
+      : 'Próxima recarga estimada el '+fechaTxt+' (~'+Math.round(diasHoy)+' días)';
+  }
+  var opTxt = est.horasPorDia ? est.horasPorDia.toFixed(1)+' h/día' : '—';
+  var sub = 'Nivel actual: '+est.nivelActual+' L · Consumo: '+est.consumoPorHora+' L/h · Operación promedio: '+opTxt;
   container.innerHTML = '<div class="alerta '+cls+'"><div class="alerta-icon">'+icon+'</div><div class="alerta-body"><div class="alerta-title">'+titulo+'</div><div class="alerta-sub">'+sub+'</div></div></div>';
 }
 
@@ -1370,6 +1425,9 @@ function renderAlertasInline() {
 
 // ===== FOTOS / AI =====
 async function callAI(b64,mt,prompt) {
+  var user = firebase.auth().currentUser;
+  if (!user) throw new Error('No has iniciado sesión');
+  var token = await user.getIdToken();
   var r = await fetch('/.netlify/functions/claude-proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:80,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:prompt}]}]})});
   var d = await r.json(); return d.content&&d.content[0]?d.content[0].text.trim():'';
 }
@@ -1628,7 +1686,9 @@ function renderInforme(){
   document.getElementById('inf-bitacora').innerHTML=bhtml?'<div class="card" style="padding:.7rem 1rem">'+bhtml+'</div>':'<div class="empty">Sin datos</div>';
   var er=document.getElementById('inf-r-tbl');
   if(!state.recargas.length){er.innerHTML='<div class="empty">Sin datos</div>';return;}
-  er.innerHTML='<table class="tbl"><thead><tr><th>Fecha</th><th>Horóm.</th><th>Vol.</th><th>Dosis</th></tr></thead><tbody>'+state.recargas.slice(0,6).map(r=>'<tr><td>'+fmtF(r.fecha)+'</td><td style="font-family:var(--mono)">'+r.horometro+'h</td><td style="font-family:var(--mono)">'+r.volCargado+'L</td><td>'+(r.dosis!=null?'<span class="tag tag-'+(r.dosis<=2?'green':'red')+'" style="font-family:var(--mono)">'+r.dosis.toFixed(2)+'</span>':'—')+'</td></tr>').join('')+'</tbody></table>';
+  er.innerHTML='<table class="tbl"><thead><tr><th>Fecha</th><th>Horóm.</th><th>Vol.</th><th>L/h</th><th>Dosis</th></tr></thead><tbody>'+state.recargas.slice(0,6).map((r,i)=>{var lh=consumoLhRecarga(i);return '<tr><td>'+fmtF(r.fecha)+'</td><td style="font-family:var(--mono)">'+r.horometro+'h</td><td style="font-family:var(--mono)">'+r.volCargado+'L</td><td style="font-family:var(--mono)">'+(lh!=null?lh.toFixed(2):'—')+'</td><td>'+(r.dosis!=null?'<span class="tag tag-'+(r.dosis<=2?'green':'red')+'" style="font-family:var(--mono)">'+r.dosis.toFixed(2)+'</span>':'—')+'</td></tr>';}).join('')+'</tbody></table>';
+  var promLhInf=promedioConsumoLh();
+  document.getElementById('inf-consumo-prom').textContent = promLhInf!=null ? 'Consumo mezcla promedio: '+promLhInf.toFixed(2)+' L/h operada' : '';
   // Charts and tables
   renderChartCloro();
   renderChartConsumo();
@@ -1744,12 +1804,12 @@ function renderChartCloro() {
     options:{
       responsive:true, maintainAspectRatio:false,
       scales:{
-        x:{ type:'category', ticks:{ color:'#6BA39B', font:{size:9}, maxTicksLimit:8 }, grid:{ color:'#1F5750' } },
-        y:{ min:0, ticks:{ color:'#6BA39B', font:{size:9} }, grid:{ color:'#1F5750' } }
+        x:{ type:'category', ticks:{ color:'#9ECEC7', font:{size:9}, maxTicksLimit:8 }, grid:{ color:'rgba(255,255,255,0.1)' } },
+        y:{ min:0, ticks:{ color:'#9ECEC7', font:{size:9} }, grid:{ color:'rgba(255,255,255,0.1)' } }
       },
       plugins:{
         legend:{ labels:{ color:'#9ECEC7', font:{size:10} } },
-        annotation: undefined
+        tooltip:{ backgroundColor:'#0A2E2A', borderColor:'#2DD4A8', borderWidth:1, titleColor:'#E8F5F2', bodyColor:'#9ECEC7' }
       }
     },
     plugins:[{
@@ -1760,7 +1820,7 @@ function renderChartCloro() {
           var y=yScale.getPixelForValue(val);
           ctx.save(); ctx.strokeStyle='#EF4444'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
           ctx.beginPath(); ctx.moveTo(chart.chartArea.left,y); ctx.lineTo(chart.chartArea.right,y); ctx.stroke();
-          ctx.fillStyle='#EF4444'; ctx.font='9px sans-serif'; ctx.fillText(val+' mg/L',chart.chartArea.left+4,y-4);
+          ctx.fillStyle='#EF4444'; ctx.font='9px sans-serif'; ctx.fillText((val===0.2?'Mín':'Máx')+' NCh409 '+val.toFixed(1),chart.chartArea.left+4,y-4);
           ctx.restore();
         });
       }
@@ -1789,18 +1849,18 @@ function renderChartConsumo() {
     data:{
       labels,
       datasets:[
-        { label:'Consumido (L)', data:volData, backgroundColor:'#2DD4A833', borderColor:'#2DD4A8', borderWidth:1 },
+        { label:'Consumido (L)', data:volData, backgroundColor:'#2DD4A8B3', borderColor:'#2DD4A8', borderWidth:1 },
         { label:'Días entre recargas', data:diasData, type:'line', borderColor:'#F59E0B', backgroundColor:'#F59E0B33', yAxisID:'y1', tension:.3, pointRadius:3, borderWidth:2 }
       ]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
       scales:{
-        x:{ ticks:{ color:'#6BA39B', font:{size:9} }, grid:{ color:'#1F5750' } },
-        y:{ position:'left', ticks:{ color:'#6BA39B', font:{size:9} }, grid:{ color:'#1F5750' }, title:{ display:true, text:'Litros', color:'#6BA39B', font:{size:9} } },
+        x:{ ticks:{ color:'#9ECEC7', font:{size:9} }, grid:{ color:'rgba(255,255,255,0.1)' } },
+        y:{ position:'left', ticks:{ color:'#9ECEC7', font:{size:9} }, grid:{ color:'rgba(255,255,255,0.1)' }, title:{ display:true, text:'Litros', color:'#9ECEC7', font:{size:9} } },
         y1:{ position:'right', ticks:{ color:'#F59E0B', font:{size:9} }, grid:{ display:false }, title:{ display:true, text:'Días', color:'#F59E0B', font:{size:9} } }
       },
-      plugins:{ legend:{ labels:{ color:'#9ECEC7', font:{size:10} } } }
+      plugins:{ legend:{ labels:{ color:'#9ECEC7', font:{size:10} } }, tooltip:{ backgroundColor:'#0A2E2A', borderColor:'#2DD4A8', borderWidth:1, titleColor:'#E8F5F2', bodyColor:'#9ECEC7' } }
     }
   });
 }
@@ -1810,20 +1870,25 @@ function renderTablaComparativa() {
   if (!el) return;
   var conDosis = state.recargas.filter(r => r.dosis != null).slice(0,10);
   if (!conDosis.length || !state.cloro.length) { el.innerHTML = '<div class="empty">Sin datos suficientes</div>'; return; }
+  var VENTANA = 48*3600*1000; // ±48h
   var rows = conDosis.map(r => {
     var fR = new Date(r.fecha).getTime();
     var closest = state.cloro.reduce((best, c) => {
       var d = Math.abs(new Date(c.fecha).getTime() - fR);
       return d < best.d ? { c, d } : best;
     }, { c: null, d: Infinity });
-    if (!closest.c) return null;
+    if (!closest.c || closest.d > VENTANA) {
+      return { fechaR:fmtF(r.fecha), dosis:r.dosis.toFixed(2), sinMedicion:true };
+    }
     var diff = Math.abs(r.dosis - closest.c.cloro);
     var estado = diff < 0.4 ? 'green' : diff <= 0.8 ? 'warn' : 'red';
-    return { fechaR:fmtF(r.fecha), dosis:r.dosis.toFixed(2), fechaC:fmtF(closest.c.fecha), cloro:closest.c.cloro.toFixed(2), diff:diff.toFixed(2), estado };
-  }).filter(Boolean);
+    return { fechaR:fmtF(r.fecha), dosis:r.dosis.toFixed(2), fechaC:fmtF(closest.c.fecha), cloro:closest.c.cloro.toFixed(2), diff:diff.toFixed(2), estado:estado };
+  });
   if (!rows.length) { el.innerHTML = '<div class="empty">Sin comparaciones disponibles</div>'; return; }
   el.innerHTML = '<div class="card" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Recarga</th><th>Dosis</th><th>Medición</th><th>Cloro</th><th>Δ</th><th>Estado</th></tr></thead><tbody>'
-    + rows.map(r => '<tr><td>'+r.fechaR+'</td><td style="font-family:var(--mono)">'+r.dosis+'</td><td>'+r.fechaC+'</td><td style="font-family:var(--mono)">'+r.cloro+'</td><td style="font-family:var(--mono)">'+r.diff+'</td><td><span class="tag tag-'+r.estado+'">'+(r.estado==='green'?'OK':r.estado==='warn'?'Revisar':'Crítico')+'</span></td></tr>').join('')
+    + rows.map(r => r.sinMedicion
+        ? '<tr><td>'+r.fechaR+'</td><td style="font-family:var(--mono)">'+r.dosis+'</td><td colspan="4" style="text-align:center;color:var(--c-text3)">Sin medición (±48h)</td></tr>'
+        : '<tr><td>'+r.fechaR+'</td><td style="font-family:var(--mono)">'+r.dosis+'</td><td>'+r.fechaC+'</td><td style="font-family:var(--mono)">'+r.cloro+'</td><td style="font-family:var(--mono)">'+r.diff+'</td><td><span class="tag tag-'+r.estado+'">'+(r.estado==='green'?'OK':r.estado==='warn'?'Revisar':'Crítico')+'</span></td></tr>').join('')
     + '</tbody></table></div>';
 }
 
@@ -1834,7 +1899,7 @@ function initPdfSelectors() {
   var meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   var now = new Date();
   meses.forEach((m,i) => { var o=document.createElement('option'); o.value=i; o.textContent=m; if(i===now.getMonth()) o.selected=true; mesEl.appendChild(o); });
-  for (var y=now.getFullYear(); y>=now.getFullYear()-2; y--) { var o=document.createElement('option'); o.value=y; o.textContent=y; anioEl.appendChild(o); }
+  for (var y=Math.max(now.getFullYear(),2026); y>=2026; y--) { var o=document.createElement('option'); o.value=y; o.textContent=y; if(y===now.getFullYear()) o.selected=true; anioEl.appendChild(o); }
   // Set bitacora dates
   var desde = document.getElementById('bit-desde'), hasta = document.getElementById('bit-hasta');
   if (desde) { var d=new Date(); d.setDate(1); desde.value=d.toISOString().slice(0,10); }
@@ -1854,6 +1919,7 @@ function generarInformeMensual() {
   var clProm = cloroM.length ? (cloroM.reduce((s,c)=>s+c.cloro,0)/cloroM.length).toFixed(2) : '—';
   var dosisProm = recsM.filter(r=>r.dosis!=null).length ? (recsM.filter(r=>r.dosis!=null).reduce((s,r)=>s+r.dosis,0)/recsM.filter(r=>r.dosis!=null).length).toFixed(2) : '—';
   var diasProm = recsM.length >= 2 ? (Math.round((new Date(recsM[0].fecha)-new Date(recsM[recsM.length-1].fecha))/(864e5*(recsM.length-1)))) : '—';
+  var consProm = promedioConsumoLh();
   var pR=getParam('receta'), pInj=getParam('inyeccion'), pConc=getParam('conc_comercial'), pDens=getParam('densidad');
   var html = '<h1>ENERGÍA Y AGUAS LAS BAHÍAS</h1>'
     +'<p>Sistema de Agua Potable Rural — Aguas Las Bahías</p>'
@@ -1866,6 +1932,7 @@ function generarInformeMensual() {
     +'<tr><td>Total mediciones de cloro libre</td><td><b>'+cloroM.length+'</b></td></tr>'
     +'<tr><td>Cloro libre promedio</td><td><b>'+clProm+' mg/L</b></td></tr>'
     +'<tr><td>Dosis promedio calculada</td><td><b>'+dosisProm+' mg/L</b></td></tr>'
+    +'<tr><td>Consumo mezcla promedio</td><td><b>'+(consProm!=null?consProm.toFixed(2)+' L/h operada':'—')+'</b></td></tr>'
     +'<tr><td>Días promedio entre recargas</td><td><b>'+diasProm+'</b></td></tr>'
     +'<tr><td>Alertas generadas / Críticas</td><td><b>'+alertasM.length+' / '+alertasM.filter(a=>a.nivel==='crit').length+'</b></td></tr>'
     +'</tbody></table>'
@@ -1877,15 +1944,15 @@ function generarInformeMensual() {
     +'<tr><td>Densidad hipoclorito</td><td>'+(pDens.val||1.12)+' g/ml</td></tr>'
     +'</tbody></table>'
     +'<h2>REGISTRO DE RECARGAS</h2>'
-    +'<table><thead><tr><th>Fecha</th><th>Horóm.</th><th>Caudalím.</th><th>Vol.cons.</th><th>Hipo</th><th>Agua</th><th>Conc.mezcla</th><th>Dosis mg/L</th><th>Resp.</th></tr></thead><tbody>'
-    +recsM.map(r => '<tr><td>'+fmtF(r.fecha)+'</td><td>'+r.horometro+'</td><td>'+(r.caudal?.toLocaleString('es-CL')||'—')+'</td><td>'+r.volCargado+'L</td><td>'+(r.hipoVal||'—')+' '+(r.hipoUnidad||'')+'</td><td>'+(r.aguaL||'—')+'L</td><td>'+(r.concMezcla?.toFixed(3)||'—')+'</td><td>'+(r.dosis?.toFixed(2)||'—')+'</td><td>'+r.responsable+'</td></tr>').join('')
+    +'<table><thead><tr><th>Fecha</th><th>Horóm.</th><th>Caudalím.</th><th>Vol.cons.</th><th>Hipo</th><th>Agua</th><th>Conc.mezcla</th><th>Dosis mg/L</th><th>L/h</th><th>Resp.</th></tr></thead><tbody>'
+    +recsM.map(function(r){ var lh=consumoLhRecarga(state.recargas.indexOf(r)); return '<tr><td>'+fmtF(r.fecha)+'</td><td>'+r.horometro+'</td><td>'+(r.caudal?.toLocaleString('es-CL')||'—')+'</td><td>'+r.volCargado+'L</td><td>'+(r.hipoVal||'—')+' '+(r.hipoUnidad||'')+'</td><td>'+(r.aguaL||'—')+'L</td><td>'+(r.concMezcla?.toFixed(3)||'—')+'</td><td>'+(r.dosis?.toFixed(2)||'—')+'</td><td>'+(lh!=null?lh.toFixed(2):'—')+'</td><td>'+r.responsable+'</td></tr>'; }).join('')
     +'</tbody></table>'
     +'<h2>REGISTRO DE CLORO LIBRE</h2>'
     +'<table><thead><tr><th>Fecha</th><th>Punto</th><th>Cl mg/L</th><th>Turb.</th><th>pH</th><th>T°</th><th>Estado NCh409</th><th>Resp.</th></tr></thead><tbody>'
     +cloroM.map(c => { var e=cloroEst(c.cloro); return '<tr><td>'+fmtF(c.fecha)+'</td><td>'+c.punto+'</td><td>'+c.cloro+'</td><td>'+(c.turb||'—')+'</td><td>'+(c.ph||'—')+'</td><td>'+(c.temp||'—')+'</td><td>'+(e?e.txt:'—')+'</td><td>'+c.responsable+'</td></tr>'; }).join('')
     +'</tbody></table>'
     +'<p style="margin-top:16px;font-size:10px"><b>NORMA APLICABLE:</b> NCh409 — Rango cloro libre: 0.2 a 2.0 mg/L</p>'
-    +'<div class="print-firma"><div>Firma: _________________<br>Cargo: Operador APR</div><div>Fecha: _________________</div></div>'
+    +'<div class="print-firma"><div>Firma operador: _________________<br>Fecha: _____________</div><div>Firma supervisor: _________________<br>Fecha: _____________</div></div>'
     +'<div class="print-footer">Generado por CloroTrack — Aguas Las Bahías · '+new Date().toLocaleString('es-CL')+'</div>';
   doPrint(html);
 }
@@ -1912,9 +1979,9 @@ function generarBitacoraPDF() {
     +'<table><thead><tr><th>Fecha/Hora</th><th>Tipo</th><th>Descripción</th><th>Valor principal</th><th>Responsable</th></tr></thead><tbody>'
     +eventos.map(e => '<tr><td>'+fmtF(e.fecha)+'</td><td>'+e.tipo+'</td><td>'+e.desc+'</td><td>'+e.valor+'</td><td>'+e.resp+'</td></tr>').join('')
     +'</tbody></table>'
-    +'<p style="margin-top:8px;font-size:10px">Total eventos: '+eventos.length+'</p>'
+    +'<p style="margin-top:8px;font-size:10px">Total eventos: '+eventos.length+' ('+eventos.filter(e=>e.tipo==='RECARGA').length+' recargas + '+eventos.filter(e=>e.tipo==='CLORO LIBRE').length+' mediciones cloro)<br>Norma: NCh409 — Cloro libre óptimo: 0.2 a 2.0 mg/L</p>'
     +'<div class="print-firma"><div>Firma: _________________<br>Cargo: Operador APR</div><div>Fecha: _________________</div></div>'
-    +'<div class="print-footer">Generado por CloroTrack — Aguas Las Bahías · '+new Date().toLocaleString('es-CL')+'</div>';
+    +'<div class="print-footer">Generado por CloroTrack — Aguas Las Bahías · '+new Date().toLocaleString('es-CL')+' · '+(state.user?.email||'')+'</div>';
   doPrint(html);
 }
 
