@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clorotrack-v12';
+const CACHE_NAME = 'clorotrack-v13';
 const ASSETS = [
   '/',
   '/index.html',
